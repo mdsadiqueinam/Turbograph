@@ -972,6 +972,7 @@ name = "postgraphile"
 version = "0.1.0"
 dependencies = [
  "async-graphql",
+ "bytes",
  "deadpool-postgres",
  "pluralizer",
  "regex",
