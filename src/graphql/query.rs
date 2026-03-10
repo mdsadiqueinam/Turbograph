@@ -7,7 +7,7 @@ use async_graphql::dynamic::{
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
-use crate::extensions::JsonListExt;
+use crate::db::JsonListExt;
 use crate::table::Table;
 use crate::utils::inflection::to_pascal_case;
 

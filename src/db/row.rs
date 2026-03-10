@@ -61,7 +61,7 @@ impl JsonExt for Row {
                 _ => self
                     .try_get::<usize, String>(i)
                     .map(Value::String)
-                    .unwrap_or(Value::Null), // fallback to string
+                    .unwrap_or(Value::Null),
             };
 
             map.insert(name, value);
