@@ -239,12 +239,13 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
                 let mut params = Vec::<SqlScalar>::with_capacity(8);
 
                 if let Some(pairs) = condition_pairs {
-                    build_where_clause(&mut sql, &mut params, pairs, &columns, &col_by_name);
+                    build_where_clause(&mut sql, &mut params, pairs, &columns, &col_by_name)?;
                 }
                 build_order_by_clause(&mut sql, &order_by, &columns, &col_by_upper)?;
-                if let Some(n) = first {
-                    write!(sql, " LIMIT {}", n).unwrap();
-                }
+                // Apply the user's limit, but cap it at a safe maximum.
+                // If they provide no limit, default to a sensible number.
+                let safe_limit = first.unwrap_or(100).clamp(1, 1000);
+                write!(sql, " LIMIT {}", safe_limit).unwrap();
                 if let Some(n) = offset {
                     write!(sql, " OFFSET {}", n).unwrap();
                 }
@@ -280,7 +281,7 @@ fn build_where_clause(
     pairs: Vec<(String, GqlValue)>,
     columns: &[Column],
     col_by_name: &HashMap<String, usize>,
-) {
+) -> Result<(), async_graphql::Error> {
     let mut has_where = false;
 
     for (key, gql_val) in pairs {
@@ -305,7 +306,7 @@ fn build_where_clause(
                 };
 
                 if op == FilterOp::In {
-                    push_in_clause(sql, params, col, op_val, &mut has_where);
+                    push_in_clause(sql, params, col, op_val, &mut has_where)?;
                     continue;
                 }
 
@@ -328,6 +329,7 @@ fn build_where_clause(
             }
         }
     }
+    Ok(())
 }
 
 fn push_in_clause(
@@ -336,8 +338,13 @@ fn push_in_clause(
     col: &Column,
     op_val: GqlValue,
     has_where: &mut bool,
-) {
+) -> Result<(), async_graphql::Error> {
     if let GqlValue::List(values) = op_val {
+        if values.len() > 10_000 {
+            return Err(async_graphql::Error::new(
+                "IN filter exceeds maximum of 10,000 items",
+            ));
+        }
         let scalars: Vec<SqlScalar> = values
             .into_iter()
             .filter_map(|val| to_sql_scalar(col, &val))
@@ -357,6 +364,7 @@ fn push_in_clause(
             sql.push(')');
         }
     }
+    Ok(())
 }
 
 fn build_order_by_clause(
