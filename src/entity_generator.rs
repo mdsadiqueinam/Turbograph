@@ -123,7 +123,7 @@ fn generate_field(column: Arc<Column>) -> Field {
 }
 
 pub fn generate_entity(table: Arc<Table>) -> Object {
-    let type_name = to_pascal_case(&singularize(table.name()));
+    let type_name = table.type_name();
     let obj = Object::new(type_name.as_str());
 
     table
@@ -140,7 +140,7 @@ pub fn generate_entity(table: Arc<Table>) -> Object {
 /// is converted to a `serde_json::Value` so the entity field resolvers can
 /// extract individual column values via `get_field_value`.
 pub fn generate_query_field(table: Arc<Table>, pool: Arc<Pool>) -> Field {
-    let type_name = to_pascal_case(&singularize(table.name()));
+    let type_name = table.type_name();
     // field name: allBlogPosts, allUsers, …
     let field_name = format!("all{}", to_pascal_case(table.name()));
     let schema = table.schema_name().to_string();

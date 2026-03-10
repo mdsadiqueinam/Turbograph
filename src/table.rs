@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use tokio_postgres::types::Type;
 
+use crate::utils::inflection::{singularize, to_pascal_case};
+
 /// Omit is used to determine which operations (create, read, update, delete) should be omitted for a given table or column based on its comment.
 /// The comment can contain an @omit annotation followed by a comma-separated list of operations to omit. For example:
 /// - `@omit read,update` would indicate that the read and update operations should be omitted for that table or column.
@@ -184,6 +186,10 @@ impl Table {
 
     pub fn schema_name(&self) -> &str {
         &self.schema_name
+    }
+
+    pub fn type_name(&self) -> String {
+        to_pascal_case(&singularize(self.name()))
     }
 }
 
