@@ -1,6 +1,6 @@
-# PostGraphile (Rust)
+# Turbograph
 
-A Rust implementation inspired by the popular [NodeJS PostGraphile](https://www.postgraphile.org/) project. Automatically generate a GraphQL API from your PostgreSQL database schema.
+A high-performance Rust implementation inspired by the popular [PostGraphile](https://www.postgraphile.org/) project. Automatically generate a GraphQL API from your PostgreSQL database schema.
 
 ## Overview
 

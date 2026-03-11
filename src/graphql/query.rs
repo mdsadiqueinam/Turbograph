@@ -36,7 +36,7 @@ pub struct GeneratedQuery {
     pub edge_type: Object,
 }
 
-/// Generates a root Query field (e.g. `allUsers`) with PostGraphile-style
+/// Generates a root Query field (e.g. `allUsers`) with Turbograph-style
 /// filtering arguments:
 ///
 /// ```graphql

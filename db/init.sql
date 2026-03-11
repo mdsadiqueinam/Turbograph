@@ -1,5 +1,5 @@
 -- ============================================================
--- Test seed data for postgraphile introspection & query tests
+-- Test seed data for turbograph introspection & query tests
 -- ============================================================
 
 -- -------------------------------------------------------
@@ -86,7 +86,7 @@ INSERT INTO public.posts (author_id, title, body, is_published, views) VALUES
     (3, 'GraphQL vs REST',                  'Both GraphQL and REST have their place...',                    TRUE,  210),
     (3, 'Designing Good APIs',              'Good API design starts with the consumer...',                  TRUE,   95),
     (4, 'My First Post',                    'Hello world! This is my first blog post.',                     TRUE,   12),
-    (1, 'PostGraphile from Scratch',        'PostGraphile auto-generates a GraphQL schema from Postgres.', TRUE,  430);
+    (1, 'Turbograph from Scratch',        'Turbograph auto-generates a GraphQL schema from Postgres.', TRUE,  430);
 
 INSERT INTO public.tags (name) VALUES
     ('rust'),
@@ -103,7 +103,7 @@ INSERT INTO public.post_tags (post_id, tag_id) VALUES
     (4, 1),               -- Draft Async Rust: rust
     (5, 3), (5, 4),       -- GraphQL vs REST: graphql, api-design
     (6, 4),               -- Designing Good APIs: api-design
-    (8, 3), (8, 2);       -- PostGraphile from Scratch: graphql, postgresql
+    (8, 3), (8, 2);       -- Turbograph from Scratch: graphql, postgresql
 
 INSERT INTO public.comments (post_id, author_id, body) VALUES
     (1, 2, 'Great intro! The ownership section really clicked for me.'),
@@ -112,5 +112,5 @@ INSERT INTO public.comments (post_id, author_id, body) VALUES
     (3, 1, 'Partial indexes are also a huge win — worth mentioning.'),
     (5, 2, 'I still prefer REST for simple CRUD, but GraphQL shines for complex queries.'),
     (5, 1, 'Agreed, context matters a lot here.'),
-    (8, 2, 'This is exactly what I needed to get started with PostGraphile!'),
+    (8, 2, 'This is exactly what I needed to get started with Turbograph!'),
     (8, 3, 'Love how the schema is derived automatically.');
