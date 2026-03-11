@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: postgres -c wal_level=logical -c max_replication_slots=10 -c max_wal_senders=10
 
   pgadmin:

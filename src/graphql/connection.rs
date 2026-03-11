@@ -83,6 +83,11 @@ pub fn make_page_info_type() -> Object {
 
 // ── Per-table Connection + Edge types ───────────────────────────────────────
 
+/// Builds the `{TypeName}Connection` and `{TypeName}Edge` object types for a given table.
+/// Exported so callers can register them with the schema separately.
+/// The connection type includes totalCount, pageInfo, edges, and nodes fields; the edge type includes cursor and node fields.
+/// The node field in both types references the main entity type for the table.
+/// example: for a "User" table, generates "UserConnection" and "UserEdge" types with appropriate fields and resolvers.
 pub fn make_connection_types(table: &Table) -> (Object, Object) {
     let type_name = table.type_name();
     let edge_type_name = format!("{}Edge", type_name);
