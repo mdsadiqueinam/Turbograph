@@ -191,6 +191,10 @@ impl Table {
     pub fn type_name(&self) -> String {
         to_pascal_case(&singularize(self.name()))
     }
+
+    pub fn omit_read(&self) -> bool {
+        self.omit.read
+    }
 }
 
 #[cfg(test)]

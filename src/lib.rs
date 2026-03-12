@@ -53,6 +53,10 @@ pub async fn build_schema(
     builder = builder.register(graphql::make_page_info_type());
 
     for table in tables {
+        if table.omit_read() {
+            continue;
+        }
+
         let table = Arc::new(table);
         let entity = graphql::generate_entity(table.clone());
         let gq = graphql::generate_query(table, pool.clone());
