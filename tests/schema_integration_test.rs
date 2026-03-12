@@ -27,9 +27,10 @@ async fn all_db_tables_are_present_in_schema() {
     let url = db_url();
 
     // Build the schema from the live database.
-    let schema = build_schema(Config {
+    let (schema, _watcher) = build_schema(Config {
         pool: PoolConfig::ConnectionString(url.clone()),
         schemas: vec!["public".to_string()],
+        watch_pg: false,
     })
     .await
     .expect("build_schema failed");

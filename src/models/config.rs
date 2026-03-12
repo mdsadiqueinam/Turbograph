@@ -13,6 +13,8 @@ pub struct Config {
     pub pool: PoolConfig,
     /// PostgreSQL schemas to introspect (e.g. `vec!["public".into()]`).
     pub schemas: Vec<String>,
+    /// If true, the library will listen for Postgres notifications and automatically invalidate cached prepared statements when the underlying table schema changes. This is disabled by default since it requires
+    pub watch_pg: bool,
 }
 
 #[derive(Clone)]
@@ -29,7 +31,7 @@ pub struct TransactionConfig {
     pub deferrable: bool,
     pub role: Option<String>,
     pub timeout_seconds: Option<u64>,
-    pub settings: Vec<(String, TransactionSettingsValue)>,
+    pub settings: Vec<(String, String)>,
 }
 
 impl Default for TransactionConfig {
@@ -58,14 +60,8 @@ impl TransactionConfig {
         }
 
         for (key, val) in &self.settings {
-            use crate::models::config::TransactionSettingsValue;
-            let val_str = match val {
-                TransactionSettingsValue::String(s) => s.clone(),
-                TransactionSettingsValue::Integer(i) => i.to_string(),
-                TransactionSettingsValue::Boolean(b) => b.to_string(),
-            };
             client
-                .query("SELECT set_config($1, $2, true)", &[key, &val_str])
+                .query("SELECT set_config($1, $2, true)", &[key, &val])
                 .await
                 .map_err(|e| gql_err(format!("set_config error: {e}")))?;
         }

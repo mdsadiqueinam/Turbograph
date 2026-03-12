@@ -25,12 +25,14 @@ fn db_url() -> String {
 }
 
 async fn make_schema() -> async_graphql::dynamic::Schema {
-    build_schema(Config {
+    let (schema, _watcher) = build_schema(Config {
         pool: PoolConfig::ConnectionString(db_url()),
         schemas: vec!["public".into()],
+        watch_pg: false,
     })
     .await
-    .expect("failed to build schema")
+    .expect("failed to build schema");
+    schema
 }
 
 /// Execute a GraphQL query and panic on any errors, returning the `data` object
