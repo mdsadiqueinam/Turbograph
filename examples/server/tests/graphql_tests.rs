@@ -15,7 +15,7 @@
 
 use async_graphql::Request;
 use serde_json::{Value as Json, json};
-use turbograph::{Config, PoolConfig, TurboGraph};
+use turbograph::{Config, PoolConfig, build_schema};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ fn db_url() -> String {
 }
 
 async fn make_schema() -> async_graphql::dynamic::Schema {
-    let server = TurboGraph::new(Config {
+    let server = build_schema(Config {
         pool: PoolConfig::ConnectionString(db_url()),
         schemas: vec!["public".into()],
         watch_pg: false,
@@ -128,21 +128,65 @@ async fn test_inactive_user_is_eve() {
 #[tokio::test]
 async fn test_user_null_bio() {
     let schema = make_schema().await;
-    let data = gql(
+
+    // Use a unique username to avoid conflicts with other tests
+    let test_username = format!(
+        "test_null_user_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
+    // Create a test user with no bio
+    let created = gql(
         &schema,
-        r#"{
-            allUsers(condition: { username: { equal: "diana" } }) {
-                nodes { username bio }
-            }
-        }"#,
+        &format!(
+            r#"mutation {{
+            createUser(input: {{ username: "{}", email: "test@example.com", is_active: true }}) {{
+                username bio
+            }}
+        }}"#,
+            test_username
+        ),
     )
     .await;
 
-    // diana has no bio (NULL in seed data)
+    assert!(
+        created["createUser"]["bio"].is_null(),
+        "created user should have null bio"
+    );
+
+    // Verify we can query for the null value
+    let data = gql(
+        &schema,
+        &format!(
+            r#"{{
+            allUsers(condition: {{ username: {{ equal: "{}" }} }}) {{
+                nodes {{ username bio }}
+            }}
+        }}"#,
+            test_username
+        ),
+    )
+    .await;
+
     assert!(
         data["allUsers"]["nodes"][0]["bio"].is_null(),
-        "diana's bio should be null"
+        "test user's bio should be null"
     );
+
+    // Cleanup
+    gql(
+        &schema,
+        &format!(
+            r#"mutation {{
+            deleteUser(condition: {{ username: {{ equal: "{}" }} }}) {{ id }}
+        }}"#,
+            test_username
+        ),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -555,6 +599,8 @@ async fn test_schema_exposes_mutation_fields() {
         "deletePost",
         "createComment",
         "createTag",
+        "updateTag",
+        "deleteTag",
     ] {
         assert!(
             fields.contains(expected),
@@ -574,20 +620,78 @@ async fn test_schema_exposes_mutation_fields() {
 #[tokio::test]
 async fn test_create_tag() {
     let schema = make_schema().await;
+
+    // Use a unique tag name to avoid conflicts with other tests
+    let test_tag_name = format!(
+        "test_tag_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
     let data = gql(
         &schema,
-        r#"mutation { createTag(input: { name: "testing" }) { id name } }"#,
+        &format!(
+            r#"mutation {{ createTag(input: {{ name: "{}" }}) {{ id name }} }}"#,
+            test_tag_name
+        ),
     )
     .await;
 
     let tag = &data["createTag"];
-    assert_eq!(tag["name"], json!("testing"));
+    assert_eq!(tag["name"], json!(&test_tag_name));
     assert!(tag["id"].as_i64().unwrap() > 0);
 
     // Clean up
     gql(
         &schema,
-        r#"mutation { deleteTag(condition: { name: { equal: "testing" } }) { id } }"#,
+        &format!(
+            r#"mutation {{ deleteTag(condition: {{ name: {{ equal: "{}" }} }}) {{ id }} }}"#,
+            test_tag_name
+        ),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_create_user() {
+    let schema = make_schema().await;
+
+    // Use a unique username to avoid conflicts with other tests
+    let test_username = format!(
+        "test_create_user_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
+    let data = gql(
+        &schema,
+        &format!(
+            r#"mutation {{
+            createUser(input: {{ username: "{}", email: "test@example.com", is_active: true }}) {{
+                id username email is_active
+            }}
+        }}"#,
+            test_username
+        ),
+    )
+    .await;
+
+    let user = &data["createUser"];
+    assert_eq!(user["username"], json!(&test_username));
+    assert_eq!(user["email"], json!("test@example.com"));
+    assert_eq!(user["is_active"], json!(true));
+
+    // Clean up
+    gql(
+        &schema,
+        &format!(
+            r#"mutation {{ deleteUser(condition: {{ username: {{ equal: "{}" }} }}) {{ id }} }}"#,
+            test_username
+        ),
     )
     .await;
 }
@@ -615,17 +719,67 @@ async fn test_update_user_bio() {
     assert_eq!(users[0]["username"], json!("diana"));
     assert_eq!(users[0]["bio"], json!("New bio for Diana"));
 
-    // Revert
-    gql(
+    // Revert to NULL
+    let reverted = gql(
         &schema,
         r#"mutation {
             updateUser(
                 patch: { bio: null }
                 condition: { username: { equal: "diana" } }
-            ) { id }
+            ) { username bio }
         }"#,
     )
     .await;
+
+    // Verify the revert worked
+    let users = reverted["updateUser"].as_array().unwrap();
+    assert_eq!(users.len(), 1);
+    assert!(
+        users[0]["bio"].is_null(),
+        "diana's bio should be reverted to null"
+    );
+}
+
+#[tokio::test]
+async fn test_update_post_views() {
+    let schema = make_schema().await;
+
+    // Update post 1 views
+    let data = gql(
+        &schema,
+        r#"mutation {
+            updatePost(
+                patch: { views: 999 }
+                condition: { id: { equal: 1 } }
+            ) { id views }
+        }"#,
+    )
+    .await;
+
+    let posts = data["updatePost"].as_array().unwrap();
+    assert_eq!(posts.len(), 1);
+    assert_eq!(posts[0]["views"], json!(999));
+
+    // Revert
+    let reverted = gql(
+        &schema,
+        r#"mutation {
+            updatePost(
+                patch: { views: 320 }
+                condition: { id: { equal: 1 } }
+            ) { id views }
+        }"#,
+    )
+    .await;
+
+    // Verify the revert worked
+    let posts = reverted["updatePost"].as_array().unwrap();
+    assert_eq!(posts.len(), 1);
+    assert_eq!(
+        posts[0]["views"],
+        json!(320),
+        "post views should be reverted to original value"
+    );
 }
 
 // ── delete mutation ───────────────────────────────────────────────────────────
@@ -634,21 +788,36 @@ async fn test_update_user_bio() {
 async fn test_create_and_delete_tag() {
     let schema = make_schema().await;
 
+    // Use a unique tag name to avoid conflicts with other tests
+    let test_tag_name = format!(
+        "test_ephemeral_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+
     // Create
     gql(
         &schema,
-        r#"mutation { createTag(input: { name: "ephemeral" }) { id } }"#,
+        &format!(
+            r#"mutation {{ createTag(input: {{ name: "{}" }}) {{ id }} }}"#,
+            test_tag_name
+        ),
     )
     .await;
 
     // Delete
     let data = gql(
         &schema,
-        r#"mutation { deleteTag(condition: { name: { equal: "ephemeral" } }) { name } }"#,
+        &format!(
+            r#"mutation {{ deleteTag(condition: {{ name: {{ equal: "{}" }} }}) {{ name }} }}"#,
+            test_tag_name
+        ),
     )
     .await;
 
     let deleted = data["deleteTag"].as_array().unwrap();
     assert_eq!(deleted.len(), 1);
-    assert_eq!(deleted[0]["name"], json!("ephemeral"));
+    assert_eq!(deleted[0]["name"], json!(&test_tag_name));
 }
