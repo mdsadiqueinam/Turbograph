@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_graphql::dynamic::{Object, Schema};
 
-pub use models::config::{Config, PoolConfig};
+pub use models::config::{Config, PoolConfig, TransactionConfig, TransactionSettingsValue};
 
 /// Introspects the database described by `config` and returns a fully
 /// constructed [`async_graphql::dynamic::Schema`] ready to execute queries.

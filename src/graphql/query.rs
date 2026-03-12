@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_graphql::Value as GqlValue;
@@ -10,6 +12,7 @@ use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
 use crate::db::JsonListExt;
+use crate::models::config::TransactionConfig;
 use crate::models::table::{Column, Table};
 use crate::utils::inflection::to_pascal_case;
 
@@ -61,22 +64,13 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     let tbl_name = table.name().to_string();
 
     let columns = Arc::new(table.columns().to_vec());
-    let col_by_name: Arc<HashMap<String, usize>> = Arc::new(
-        columns
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| !c.omit_read())
-            .map(|(i, c)| (c.name().to_string(), i))
-            .collect(),
-    );
-    let col_by_upper: Arc<HashMap<String, usize>> = Arc::new(
-        columns
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| !c.omit_read())
-            .map(|(i, c)| (c.name().to_uppercase(), i))
-            .collect(),
-    );
+    let (mut name_map, mut upper_map) = (HashMap::new(), HashMap::new());
+    for (i, col) in columns.iter().enumerate().filter(|(_, c)| !c.omit_read()) {
+        name_map.insert(col.name().to_string(), i);
+        upper_map.insert(col.name().to_uppercase(), i);
+    }
+    let col_by_name = Arc::new(name_map);
+    let col_by_upper = Arc::new(upper_map);
 
     let query_field = Field::new(
         field_name,
@@ -112,6 +106,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
             let columns = columns.clone();
             let col_by_name = col_by_name.clone();
             let col_by_upper = col_by_upper.clone();
+            let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
             FieldFuture::new(async move {
                 let mut where_clause = String::new();
@@ -139,10 +134,11 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
                     &tbl_name,
                     &where_clause,
                     &order_clause,
-                    &params,
+                    params,
                     safe_limit,
                     off,
                     &order_by,
+                    tx_config,
                 )
                 .await
             })
@@ -237,9 +233,7 @@ fn push_in_clause(
 ) -> Result<(), async_graphql::Error> {
     if let GqlValue::List(values) = op_val {
         if values.len() > 10_000 {
-            return Err(async_graphql::Error::new(
-                "IN filter exceeds maximum of 10,000 items",
-            ));
+            return Err(gql_err("IN filter exceeds maximum of 10,000 items"));
         }
         let scalars: Vec<SqlScalar> = values
             .into_iter()
@@ -282,10 +276,7 @@ fn build_order_by_clause(
             continue;
         };
         let Some(&col_idx) = col_by_upper.get(col_upper) else {
-            return Err(async_graphql::Error::new(format!(
-                "unknown column for ordering: {}",
-                col_upper
-            )));
+            return Err(gql_err(format!("unknown column for ordering: {col_upper}")));
         };
         if i > 0 {
             sql.push_str(", ");
@@ -295,63 +286,131 @@ fn build_order_by_clause(
     Ok(())
 }
 
+async fn with_transaction<T>(
+    pool: &Pool,
+    tx_config: Option<TransactionConfig>,
+    callback: impl for<'c> FnOnce(
+        &'c tokio_postgres::Client,
+    ) -> Pin<
+        Box<dyn Future<Output = Result<T, async_graphql::Error>> + Send + 'c>,
+    >,
+) -> Result<T, async_graphql::Error> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|e| gql_err(format!("DB pool error: {e}")))?;
+
+    // Build BEGIN with optional transaction characteristics.
+    let mut begin = String::from("BEGIN");
+    if let Some(ref config) = tx_config {
+        if let Some(level) = config.isolation_level {
+            let lvl_str = match level {
+                tokio_postgres::IsolationLevel::ReadUncommitted => "READ UNCOMMITTED",
+                tokio_postgres::IsolationLevel::ReadCommitted => "READ COMMITTED",
+                tokio_postgres::IsolationLevel::RepeatableRead => "REPEATABLE READ",
+                tokio_postgres::IsolationLevel::Serializable => "SERIALIZABLE",
+                _ => "READ COMMITTED",
+            };
+            write!(begin, " ISOLATION LEVEL {lvl_str}").unwrap();
+        }
+        if config.read_only {
+            begin.push_str(" READ ONLY");
+        }
+        if config.deferrable {
+            begin.push_str(" DEFERRABLE");
+        }
+    }
+    client
+        .batch_execute(&begin)
+        .await
+        .map_err(|e| gql_err(format!("BEGIN error: {e}")))?;
+
+    if let Some(ref config) = tx_config {
+        config.apply(&client).await?;
+    }
+
+    let result = callback(&*client).await;
+
+    match &result {
+        Ok(_) => {
+            client
+                .batch_execute("COMMIT")
+                .await
+                .map_err(|e| gql_err(format!("COMMIT error: {e}")))?;
+        }
+        Err(_) => {
+            let _ = client.batch_execute("ROLLBACK").await;
+        }
+    }
+
+    result
+}
+
 async fn execute_connection_query(
     pool: &Pool,
     tbl_schema: &str,
     tbl_name: &str,
     where_clause: &str,
     order_clause: &str,
-    params: &[SqlScalar],
+    params: Vec<SqlScalar>,
     limit: i64,
     offset: i64,
     order_by: &[String],
+    tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let param_refs: Vec<&(dyn ToSql + Sync)> =
-        params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
+    let limit_param = params.len() + 1;
+    let offset_param = params.len() + 2;
 
-    let count_sql = format!(
-        "SELECT COUNT(*) FROM \"{}\".\"{}\"{}",
-        tbl_schema, tbl_name, where_clause
-    );
+    let count_sql = format!("SELECT COUNT(*) FROM \"{tbl_schema}\".\"{tbl_name}\"{where_clause}");
     let data_sql = format!(
-        "SELECT * FROM \"{}\".\"{}\"{}{} LIMIT {} OFFSET {}",
-        tbl_schema, tbl_name, where_clause, order_clause, limit, offset
+        "SELECT * FROM \"{tbl_schema}\".\"{tbl_name}\"{where_clause}{order_clause} LIMIT ${limit_param} OFFSET ${offset_param}"
     );
+    let order_by = order_by.to_vec();
 
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| async_graphql::Error::new(format!("DB pool error: {e}")))?;
+    with_transaction(pool, tx_config, |client| {
+        Box::pin(async move {
+            let base_refs: Vec<&(dyn ToSql + Sync)> =
+                params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
 
-    let (count_row, data_rows) = tokio::try_join!(
-        client.query_one(&count_sql, param_refs.as_slice()),
-        client.query(&data_sql, param_refs.as_slice()),
-    )
-    .map_err(|e| async_graphql::Error::new(format!("DB query error: {e}")))?;
+            let data_refs: Vec<&(dyn ToSql + Sync)> = base_refs
+                .iter()
+                .copied()
+                .chain([&limit as &(dyn ToSql + Sync), &offset as _])
+                .collect();
 
-    let total_count: i64 = count_row.get(0);
-    let json_rows = data_rows.to_json_list();
+            let (count_row, data_rows) = tokio::try_join!(
+                client.query_one(&count_sql, &base_refs),
+                client.query(&data_sql, &data_refs),
+            )
+            .map_err(|e| gql_err(format!("DB query error: {e}")))?;
 
-    let edges: Vec<EdgePayload> = json_rows
-        .into_iter()
-        .enumerate()
-        .map(|(i, node)| EdgePayload {
-            cursor: encode_cursor(order_by, (offset as usize) + i),
-            node,
+            let total_count: i64 = count_row.get(0);
+            let json_rows = data_rows.to_json_list();
+            let edge_count = json_rows.len() as i64;
+
+            let edges = json_rows
+                .into_iter()
+                .enumerate()
+                .map(|(i, node)| EdgePayload {
+                    cursor: encode_cursor(&order_by, (offset as usize) + i),
+                    node,
+                })
+                .collect();
+
+            Ok(Some(FieldValue::owned_any(ConnectionPayload {
+                total_count,
+                has_next_page: (offset + edge_count) < total_count,
+                has_previous_page: offset > 0,
+                edges,
+            })))
         })
-        .collect();
+    })
+    .await
+}
 
-    let has_next_page = (offset + edges.len() as i64) < total_count;
-    let has_previous_page = offset > 0;
-
-    let payload = ConnectionPayload {
-        total_count,
-        has_next_page,
-        has_previous_page,
-        edges,
-    };
-
-    Ok(Some(FieldValue::owned_any(payload)))
+#[inline]
+fn gql_err(msg: impl std::fmt::Display) -> async_graphql::Error {
+    async_graphql::Error::new(msg.to_string())
 }
 
 #[inline]
