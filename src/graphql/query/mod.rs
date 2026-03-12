@@ -5,8 +5,8 @@ use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::{Enum, Field, FieldFuture, InputObject, InputValue, Object, TypeRef};
 use deadpool_postgres::Pool;
 
-use crate::models::config::TransactionConfig;
 use crate::models::table::Table;
+use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
 use super::connection::make_connection_types;
@@ -156,9 +156,4 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
         connection_type,
         edge_type,
     }
-}
-
-#[inline]
-fn gql_err(msg: impl std::fmt::Display) -> async_graphql::Error {
-    async_graphql::Error::new(msg.to_string())
 }

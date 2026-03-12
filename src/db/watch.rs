@@ -79,7 +79,7 @@ pub(crate) async fn start_watching(
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             while notify_rx.try_recv().is_ok() {}
 
-            match crate::rebuild_schema(&pool, &schemas).await {
+            match crate::schema::rebuild_schema(&pool, &schemas).await {
                 Ok(new_schema) => {
                     eprintln!("[turbograph] schema rebuilt successfully");
                     if tx.send(new_schema).is_err() {

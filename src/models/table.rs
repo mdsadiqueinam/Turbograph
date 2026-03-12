@@ -42,7 +42,7 @@ impl Omit {
             omit.delete = parts.contains(&"delete");
         }
 
-        return omit;
+        omit
     }
 }
 
@@ -86,7 +86,7 @@ impl Column {
         let data_type = Type::from_oid(type_oid).expect("Data type is not supported");
         let omit = Omit::new(&comment);
 
-        return Self {
+        Self {
             id: column_id,
             table_oid,
             name: column_name,
@@ -94,7 +94,7 @@ impl Column {
             r#type: data_type,
             nullable,
             omit,
-        };
+        }
     }
 
     pub fn table_oid(&self) -> &u32 {
@@ -153,7 +153,7 @@ impl Table {
         let comment = row.try_get::<_, String>(4).unwrap_or("".to_string());
         let omit = Omit::new(&comment);
 
-        return Self {
+        Self {
             oid,
             schema_name,
             name: table_name,
@@ -165,7 +165,7 @@ impl Table {
             comment,
             columns: Vec::new(),
             omit,
-        };
+        }
     }
 
     pub(crate) fn push_column(&mut self, column: Column) {
