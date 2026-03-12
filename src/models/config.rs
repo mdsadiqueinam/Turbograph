@@ -14,3 +14,18 @@ pub struct Config {
     /// PostgreSQL schemas to introspect (e.g. `vec!["public".into()]`).
     pub schemas: Vec<String>,
 }
+
+pub enum TransactionSettingsValue {
+    String(String),
+    Integer(i64),
+    Boolean(bool),
+}
+
+pub struct TransactionConfig {
+    pub isolation_level: Option<tokio_postgres::IsolationLevel>,
+    pub read_only: bool,
+    pub deferrable: bool,
+    pub role: Option<String>,
+    pub timeout_seconds: Option<u64>,
+    pub settings: Vec<(String, TransactionSettingsValue)>,
+}
