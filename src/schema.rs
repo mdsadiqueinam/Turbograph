@@ -63,7 +63,10 @@ impl TurboGraph {
 
     /// Execute a GraphQL request against the current schema.
     pub async fn execute(&self, request: async_graphql::Request) -> async_graphql::Response {
-        let schema = self.schema.read().await.clone();
+        // SAFETY: The schema is only swapped out in its entirety after a fresh build completes,
+        // so there are no concerns about concurrent mutation. Readers will always see a consistent schema,
+        // albeit possibly an older one if a rebuild is in progress.
+        let schema = self.schema.read().await;
         schema.execute(request).await
     }
 
