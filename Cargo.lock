@@ -1454,6 +1454,7 @@ dependencies = [
  "async-graphql-axum",
  "axum",
  "serde",
+ "serde_json",
  "tokio",
  "turbograph",
 ]
