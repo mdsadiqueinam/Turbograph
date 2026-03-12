@@ -116,6 +116,18 @@ impl Column {
     pub fn omit_read(&self) -> bool {
         self.omit.read
     }
+
+    pub fn omit_create(&self) -> bool {
+        self.omit.create
+    }
+
+    pub fn omit_update(&self) -> bool {
+        self.omit.update
+    }
+
+    pub fn omit_delete(&self) -> bool {
+        self.omit.delete
+    }
 }
 
 #[cfg(test)]
