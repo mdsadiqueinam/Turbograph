@@ -1,7 +1,7 @@
 use async_graphql::dynamic::{Enum, EnumItem, InputObject, InputValue, TypeRef};
 use tokio_postgres::types::Type;
 
-use crate::table::Table;
+use crate::models::table::Table;
 use crate::utils::inflection::to_pascal_case;
 
 use super::type_mapping::condition_type_ref;
@@ -144,7 +144,7 @@ pub fn make_order_by_enum(table: &Table) -> Enum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::table::Table;
+    use crate::models::table::Table;
     use tokio_postgres::types::Type;
 
     #[test]

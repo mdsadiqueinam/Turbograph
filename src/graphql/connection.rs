@@ -1,7 +1,7 @@
 use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use base64::Engine;
 
-use crate::table::Table;
+use crate::models::table::Table;
 
 #[derive(Clone, Debug)]
 pub struct EdgePayload {

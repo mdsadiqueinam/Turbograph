@@ -10,7 +10,7 @@ use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
 use crate::db::JsonListExt;
-use crate::table::{Column, Table};
+use crate::models::table::{Column, Table};
 use crate::utils::inflection::to_pascal_case;
 
 use super::connection::{ConnectionPayload, EdgePayload, encode_cursor, make_connection_types};

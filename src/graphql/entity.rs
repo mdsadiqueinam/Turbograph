@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_graphql::dynamic::{Field, FieldFuture, Object};
 
-use crate::table::{Column, Table};
+use crate::models::table::{Column, Table};
 
 use super::type_mapping::{get_field_value, get_type_ref};
 
@@ -36,7 +36,7 @@ pub fn generate_entity(table: Arc<Table>) -> Object {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::table::{Column, Table};
+    use crate::models::table::{Column, Table};
     use std::sync::Arc;
     use tokio_postgres::types::Type;
 

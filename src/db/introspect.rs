@@ -1,4 +1,4 @@
-use crate::table::{Column, Table};
+use crate::models::table::{Column, Table};
 use std::collections::HashMap;
 
 fn map_columns_to_table(tables: Vec<Table>, columns: Vec<Column>) -> Vec<Table> {

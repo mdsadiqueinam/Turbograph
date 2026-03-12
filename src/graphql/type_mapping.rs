@@ -3,7 +3,7 @@ use async_graphql::dynamic::{FieldValue, TypeRef};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use tokio_postgres::types::Type;
 
-use crate::table::Column;
+use crate::models::table::Column;
 
 use super::sql_scalar::SqlScalar;
 

@@ -1,28 +1,13 @@
 mod db;
 mod graphql;
-mod table;
+mod models;
 mod utils;
 
 use std::sync::Arc;
 
 use async_graphql::dynamic::{Object, Schema};
 
-/// How the library should obtain a database connection.
-pub enum PoolConfig {
-    /// A `postgres://` (or `postgresql://`) connection string.
-    /// The library will create and own a `deadpool_postgres::Pool` from it.
-    ConnectionString(String),
-    /// An already-configured pool managed by the caller.
-    Pool(deadpool_postgres::Pool),
-}
-
-/// Top-level configuration passed to the schema builder.
-pub struct Config {
-    /// Database connection — either a DSN or an existing pool.
-    pub pool: PoolConfig,
-    /// PostgreSQL schemas to introspect (e.g. `vec!["public".into()]`).
-    pub schemas: Vec<String>,
-}
+pub use models::config::{Config, PoolConfig};
 
 /// Introspects the database described by `config` and returns a fully
 /// constructed [`async_graphql::dynamic::Schema`] ready to execute queries.
