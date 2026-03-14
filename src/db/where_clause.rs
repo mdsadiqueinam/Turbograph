@@ -13,19 +13,19 @@ pub trait WhereBuilder {
         F: FnOnce(&mut Self);
 }
 
-/// This is an internal-only trait.
-/// It's not public, so users of your library won't see it.
+/// Internal-only trait. Provides the low-level storage for WHERE clause building.
+/// `has_where` is derived from `get_query().is_empty()` — no separate flag needed.
 pub(super) trait WhereInternal {
-    fn get_has_where(&self) -> bool;
-    fn set_has_where(&mut self, has_where: bool);
     fn get_query(&self) -> &str;
     fn push_to_query(&mut self, query: String);
     fn push_param(&mut self, scalar: Option<SqlScalar>) -> usize;
 
-    // We can move the "guesswork" logic here
+    fn has_where(&self) -> bool {
+        !self.get_query().is_empty()
+    }
+
     fn get_logical_sep(&mut self) -> &str {
-        if !self.get_has_where() {
-            self.set_has_where(true);
+        if !self.has_where() {
             " WHERE "
         } else {
             let query = self.get_query().trim();
@@ -55,7 +55,7 @@ impl<T: WhereInternal> WhereBuilder for T {
     }
 
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
-        if self.get_has_where() {
+        if self.has_where() {
             self.push_to_query(" OR ".to_string());
         }
         self.where_clause(column, op, scalar)
@@ -65,8 +65,7 @@ impl<T: WhereInternal> WhereBuilder for T {
     where
         F: FnOnce(&mut Self),
     {
-        if !self.get_has_where() {
-            self.set_has_where(true);
+        if !self.has_where() {
             self.push_to_query(" WHERE ".to_string());
         }
         self.push_to_query(" (".to_string());
@@ -79,7 +78,7 @@ impl<T: WhereInternal> WhereBuilder for T {
     where
         F: FnOnce(&mut Self),
     {
-        if self.get_has_where() {
+        if self.has_where() {
             self.push_to_query(" OR ".to_string());
         }
         self.where_block(block)

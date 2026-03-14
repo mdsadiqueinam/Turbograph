@@ -1,6 +1,6 @@
 use deadpool_postgres::Pool;
 
-use super::query::{MutationMode, NoOrder, Query, SelectMode};
+use super::query::{delete::Delete, insert::Insert, select::Select, update::Update};
 use crate::models::config::PoolConfig;
 
 /// Resolves a [`PoolConfig`] into a concrete `deadpool_postgres::Pool`.
@@ -21,23 +21,23 @@ pub(crate) fn resolve(
 }
 
 pub trait PoolExt {
-    fn select(&self, table: &str) -> Query<SelectMode, NoOrder>;
-    fn insert(&self, table: &str) -> Query<MutationMode, NoOrder>;
-    fn update(&self, table: &str) -> Query<MutationMode, NoOrder>;
-    fn delete(&self, table: &str) -> Query<MutationMode, NoOrder>;
+    fn select(&self, table: &str) -> Select;
+    fn insert(&self, table: &str) -> Insert;
+    fn update(&self, table: &str) -> Update;
+    fn delete(&self, table: &str) -> Delete;
 }
 
 impl PoolExt for Pool {
-    fn select(&self, table: &str) -> Query<SelectMode, NoOrder> {
-        Query::select(table, self.clone())
+    fn select(&self, table: &str) -> Select {
+        Select::new(table, self.clone())
     }
-    fn insert(&self, table: &str) -> Query<MutationMode, NoOrder> {
-        Query::insert(table, self.clone())
+    fn insert(&self, table: &str) -> Insert {
+        Insert::new(table, self.clone())
     }
-    fn update(&self, table: &str) -> Query<MutationMode, NoOrder> {
-        Query::update(table, self.clone())
+    fn update(&self, table: &str) -> Update {
+        Update::new(table, self.clone())
     }
-    fn delete(&self, table: &str) -> Query<MutationMode, NoOrder> {
-        Query::delete(table, self.clone())
+    fn delete(&self, table: &str) -> Delete {
+        Delete::new(table, self.clone())
     }
 }
