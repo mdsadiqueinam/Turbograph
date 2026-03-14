@@ -51,7 +51,7 @@ pub(crate) async fn with_transaction<T>(
     result
 }
 
-fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> String {
+pub(super) fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> String {
     let mut begin = String::from("BEGIN");
     if let Some(cfg) = tx_config {
         if let Some(level) = cfg.isolation_level {
@@ -76,7 +76,7 @@ fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> String {
 
 /// Applies `SET LOCAL` directives (role, custom settings, timeout) inside
 /// an already-open transaction.
-async fn apply_settings(
+pub(super) async fn apply_settings(
     client: &tokio_postgres::Client,
     cfg: &TransactionConfig,
 ) -> Result<(), async_graphql::Error> {

@@ -1,7 +1,9 @@
 use crate::TransactionConfig;
 use deadpool_postgres::Pool;
+use tokio_postgres::types::ToSql;
 
 use super::scalar::SqlScalar;
+use super::transaction::{apply_settings, build_begin_statement};
 use super::where_clause::WhereInternal;
 
 // ── Mode markers ─────────────────────────────────────────────────────────────
@@ -52,19 +54,54 @@ impl<M, O> Query<M, O> {
             _order: std::marker::PhantomData,
         }
     }
+
+    fn data_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+        self.params
+            .iter()
+            .map(|p| p as &(dyn ToSql + Sync))
+            .collect()
+    }
 }
 
 // ── execute is available in all states ────────────────────────────────────────
 
 impl<M, O> Query<M, O> {
-    pub async fn execute(&self, tx_config: &TransactionConfig) -> Result<(), async_graphql::Error> {
-        let _client = self
+    pub async fn execute(
+        &self,
+        tx_config: &Option<TransactionConfig>,
+    ) -> Result<(), async_graphql::Error> {
+        let client = self
             .pool
             .get()
             .await
             .map_err(|e| async_graphql::Error::new(format!("Pool error: {e}")))?;
 
-        // TODO: run self.query with self.params inside a transaction
+        let begin = build_begin_statement(tx_config);
+        client
+            .batch_execute(&begin)
+            .await
+            .map_err(|e| format!("BEGIN error: {e}"))?;
+
+        if let Some(cfg) = tx_config {
+            apply_settings(&*client, cfg).await?;
+        }
+
+        // let params = self.data_params();
+
+        // match &result {
+        //     Ok(_) => {
+        //         client
+        //             .batch_execute("COMMIT")
+        //             .await
+        //             .map_err(|e| format!("COMMIT error: {e}"))?;
+        //     }
+        //     Err(_) => {
+        //         let _ = client.batch_execute("ROLLBACK").await;
+        //     }
+        // }
+
+        // result
+
         Ok(())
     }
 }
