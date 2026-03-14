@@ -3,8 +3,8 @@ use super::scalar::SqlScalar;
 
 /// The Public API
 pub trait WhereBuilder {
-    fn where_clause(&mut self, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
-    fn or_where_clause(&mut self, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
+    fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
+    fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
     fn where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);
@@ -39,26 +39,26 @@ pub(super) trait WhereInternal {
 
     fn push_query_with_logical_sep(&mut self, query: String) {
         let sep = self.get_logical_sep().to_string();
-        self.push_to_query(format!(" {sep} {query}"));
+        self.push_to_query(format!("{sep}{query}"));
     }
 }
 
 impl<T: WhereInternal> WhereBuilder for T {
-    fn where_clause(&mut self, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
+    fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
         let operator_str = scalar
             .is_some()
             .then_some(op.sql_operator())
             .unwrap_or("IS");
         let param_num = self.push_param(scalar);
-        self.push_query_with_logical_sep(format!(" {operator_str} ${param_num}"));
+        self.push_query_with_logical_sep(format!(" {column} {operator_str} ${param_num}"));
         self
     }
 
-    fn or_where_clause(&mut self, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
+    fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
         if self.get_has_where() {
             self.push_to_query(" OR ".to_string());
         }
-        self.where_clause(op, scalar)
+        self.where_clause(column, op, scalar)
     }
 
     fn where_block<F>(&mut self, block: F) -> &mut Self
