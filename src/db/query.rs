@@ -4,22 +4,32 @@ use deadpool_postgres::Pool;
 use super::scalar::SqlScalar;
 use super::where_clause::WhereInternal;
 
-pub struct MutationMode;
+// ── Mode markers ─────────────────────────────────────────────────────────────
 
+pub struct MutationMode;
 pub struct SelectMode;
 
-pub struct Query<M> {
+// ── Order-phase markers ───────────────────────────────────────────────────────
+
+/// The query has not yet had ORDER BY applied – WHERE clauses are still allowed.
+pub struct NoOrder;
+/// ORDER BY has been applied; only `.execute()` is legal now.
+pub struct Ordered;
+
+// ── Query struct ──────────────────────────────────────────────────────────────
+
+pub struct Query<M, O = NoOrder> {
     query: String,
     params: Vec<Option<SqlScalar>>,
     has_where: bool,
     pool: Pool,
-    _mode: std::marker::PhantomData<M>, // Tells Rust M is used here
+    _mode: std::marker::PhantomData<M>,
+    _order: std::marker::PhantomData<O>,
 }
 
-// impl std::future::Future<Output = Result<(), async_graphql::Error>> + 'a
+// ── Internal helpers (available to both modes / both order phases) ─────────────
 
-// Common implementation for BOTH
-impl<M> Query<M> {
+impl<M, O> Query<M, O> {
     fn new(base_sql: String, pool: Pool) -> Self {
         Self {
             query: base_sql,
@@ -27,21 +37,41 @@ impl<M> Query<M> {
             pool,
             has_where: false,
             _mode: std::marker::PhantomData,
+            _order: std::marker::PhantomData,
         }
     }
 
-    async fn execute(&self, tx_config: &TransactionConfig) -> Result<(), async_graphql::Error> {
-        let client = self
+    /// Transition into a different order-phase without copying any data.
+    fn into_phase<O2>(self) -> Query<M, O2> {
+        Query {
+            query: self.query,
+            params: self.params,
+            has_where: self.has_where,
+            pool: self.pool,
+            _mode: std::marker::PhantomData,
+            _order: std::marker::PhantomData,
+        }
+    }
+}
+
+// ── execute is available in all states ────────────────────────────────────────
+
+impl<M, O> Query<M, O> {
+    pub async fn execute(&self, tx_config: &TransactionConfig) -> Result<(), async_graphql::Error> {
+        let _client = self
             .pool
             .get()
             .await
-            .map_err(|e| format!("Pool error: {e}"))?;
+            .map_err(|e| async_graphql::Error::new(format!("Pool error: {e}")))?;
 
+        // TODO: run self.query with self.params inside a transaction
         Ok(())
     }
 }
 
-impl<M> WhereInternal for Query<M> {
+// ── WhereInternal (internal plumbing, both modes, NoOrder only) ───────────────
+
+impl<M> WhereInternal for Query<M, NoOrder> {
     fn get_has_where(&self) -> bool {
         self.has_where
     }
@@ -60,10 +90,49 @@ impl<M> WhereInternal for Query<M> {
     }
 }
 
-// Only Select queries get this!
-impl Query<SelectMode> {
-    pub fn order_by(mut self, column: &str) -> Self {
-        self.query.push_str(&format!(" ORDER BY {column}"));
-        self
+// ── order_by is only available on SELECT queries that haven't been ordered ────
+
+impl Query<SelectMode, NoOrder> {
+    /// Apply ORDER BY and advance to the `Ordered` phase.
+    /// After this call only `.execute()` is available – WHERE clauses are locked out.
+    pub fn order_by(
+        mut self,
+        column: &str,
+        direction: OrderDirection,
+    ) -> Query<SelectMode, Ordered> {
+        self.query
+            .push_str(&format!(" ORDER BY {column} {}", direction.as_str()));
+        // old phase will drop here
+        self.into_phase()
+    }
+}
+
+// ── ORDER BY direction ────────────────────────────────────────────────────────
+
+pub enum OrderDirection {
+    Asc,
+    Desc,
+}
+
+impl OrderDirection {
+    fn as_str(&self) -> &'static str {
+        match self {
+            OrderDirection::Asc => "ASC",
+            OrderDirection::Desc => "DESC",
+        }
+    }
+}
+
+// ── Constructors (one per mode) ───────────────────────────────────────────────
+
+impl Query<SelectMode, NoOrder> {
+    pub fn select(table: &str, pool: Pool) -> Self {
+        Self::new(format!("SELECT * FROM {table}"), pool)
+    }
+}
+
+impl Query<MutationMode, NoOrder> {
+    pub fn mutation(sql: String, pool: Pool) -> Self {
+        Self::new(sql, pool)
     }
 }
