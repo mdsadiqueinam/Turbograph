@@ -25,6 +25,9 @@ pub struct Query<M, O = NoOrder> {
     params: Vec<Option<SqlScalar>>,
     has_where: bool,
     pool: Pool,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    orders: Vec<(String, OrderDirection)>,
     _mode: std::marker::PhantomData<M>,
     _order: std::marker::PhantomData<O>,
 }
@@ -38,6 +41,9 @@ impl<M, O> Query<M, O> {
             params: Vec::new(),
             pool,
             has_where: false,
+            limit: None,
+            offset: None,
+            orders: Vec::new(),
             _mode: std::marker::PhantomData,
             _order: std::marker::PhantomData,
         }
@@ -50,12 +56,15 @@ impl<M, O> Query<M, O> {
             params: self.params,
             has_where: self.has_where,
             pool: self.pool,
+            limit: self.limit,
+            offset: self.offset,
+            orders: self.orders,
             _mode: std::marker::PhantomData,
             _order: std::marker::PhantomData,
         }
     }
 
-    fn data_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    fn count_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
             .map(|p| p as &(dyn ToSql + Sync))
@@ -137,8 +146,7 @@ impl Query<SelectMode, NoOrder> {
         column: &str,
         direction: OrderDirection,
     ) -> Query<SelectMode, Ordered> {
-        self.query
-            .push_str(&format!(" ORDER BY {column} {}", direction.as_str()));
+        self.orders.push((column.to_string(), direction));
         // old phase will drop here
         self.into_phase()
     }
