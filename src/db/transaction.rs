@@ -3,9 +3,53 @@ use std::future::Future;
 use std::pin::Pin;
 
 use deadpool_postgres::Pool;
+use tokio_postgres::types::ToSql;
 
 use crate::db::error::DbError;
 use crate::models::transaction::TransactionConfig;
+
+/// Executes a query (INSERT, UPDATE, DELETE) within a transaction.
+/// Returns the number of affected rows.
+pub async fn execute_query(
+    pool: &Pool,
+    tx_config: &Option<TransactionConfig>,
+    query: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<u64, DbError> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|e| DbError::Pool(e.to_string()))?;
+
+    let begin = build_begin_statement(tx_config);
+    client
+        .batch_execute(&begin)
+        .await
+        .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
+
+    if let Some(cfg) = tx_config.as_ref() {
+        apply_settings(&*client, cfg).await?;
+    }
+
+    let result = client
+        .execute(query, params)
+        .await
+        .map_err(|e| DbError::Query(e.to_string()));
+
+    match &result {
+        Ok(_) => {
+            client
+                .batch_execute("COMMIT")
+                .await
+                .map_err(|e| DbError::Transaction(format!("COMMIT error: {e}")))?;
+        }
+        Err(_) => {
+            let _ = client.batch_execute("ROLLBACK").await;
+        }
+    }
+
+    result
+}
 
 /// Acquires a pooled connection, wraps the callback in `BEGIN` / `COMMIT`, and
 /// rolls back automatically on error. Works with or without a

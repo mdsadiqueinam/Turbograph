@@ -7,7 +7,7 @@ use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
 use crate::db::scalar::SqlScalar;
-use crate::db::transaction::{apply_settings, build_begin_statement};
+use crate::db::transaction::execute_query;
 
 use super::QueryBase;
 
@@ -112,43 +112,9 @@ impl Insert {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<u64, DbError> {
-        let client = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| DbError::Pool(e.to_string()))?;
-
-        let begin = build_begin_statement(&tx_config);
-        client
-            .batch_execute(&begin)
-            .await
-            .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
-
-        if let Some(ref cfg) = tx_config {
-            apply_settings(&*client, cfg).await.map_err(|e| DbError::Transaction(e.to_string()))?;
-        }
-
         let query = self.get_query();
         let params = self.all_params();
-
-        let result = client
-            .execute(&query, &params)
-            .await
-            .map_err(|e| DbError::Query(e.to_string()));
-
-        match &result {
-            Ok(_) => {
-                client
-                    .batch_execute("COMMIT")
-                    .await
-                    .map_err(|e| DbError::Transaction(format!("COMMIT error: {e}")))?;
-            }
-            Err(_) => {
-                let _ = client.batch_execute("ROLLBACK").await;
-            }
-        }
-
-        result
+        execute_query(&self.pool, &tx_config, &query, &params).await
     }
 }
 
