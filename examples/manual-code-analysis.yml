@@ -40,3 +40,13 @@ jobs:
             ${{ github.event.inputs.analysis_type == 'summarize-commit' && 'Task: Provide a clear, concise summary of what changed in the latest commit. Include the commit message, files changed, and the purpose of the changes.' || '' }}
 
             ${{ github.event.inputs.analysis_type == 'security-review' && 'Task: Review the latest commit for potential security vulnerabilities. Check for exposed secrets, insecure coding patterns, dependency vulnerabilities, or any other security concerns. Provide specific recommendations if issues are found.' || '' }}
+        env:
+          ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_AUTH_TOKEN }}
+          API_TIMEOUT_MS: "3000000"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+          ANTHROPIC_MODEL: MiniMax-M2.5
+          ANTHROPIC_SMALL_FAST_MODEL: MiniMax-M2.5
+          ANTHROPIC_DEFAULT_SONNET_MODEL: MiniMax-M2.5
+          ANTHROPIC_DEFAULT_OPUS_MODEL: MiniMax-M2.5
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: MiniMax-M2.5
