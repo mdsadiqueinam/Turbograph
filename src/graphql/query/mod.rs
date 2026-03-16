@@ -14,22 +14,6 @@ use super::sql_scalar::SqlScalar;
 mod executor;
 pub(crate) mod sql;
 
-/// Everything the schema builder needs for one table.
-pub struct GeneratedQuery {
-    /// The root Query field (e.g. `allUsers`).
-    pub query_field: Field,
-    /// The `{T}Condition` input type - must be registered with the schema.
-    pub condition_type: InputObject,
-    /// Per-column filter input objects referenced by `{T}Condition`.
-    pub condition_filter_types: Vec<InputObject>,
-    /// The `{T}OrderBy` enum - must be registered with the schema.
-    pub order_by_enum: Enum,
-    /// The `{T}Connection` object type - must be registered with the schema.
-    pub connection_type: Object,
-    /// The `{T}Edge` object type - must be registered with the schema.
-    pub edge_type: Object,
-}
-
 /// Generates a root Query field (e.g. `allUsers`) with Turbograph-style
 /// filtering arguments:
 ///
@@ -41,12 +25,8 @@ pub struct GeneratedQuery {
 ///   offset:    Int             # OFFSET
 /// ): UserConnection!
 /// ```
-pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
-    let order_by_enum = table.order_by_enum();
-    let connection_type = table.connection_type();
-    let edge_type = table.edge_type();
-
-    let connection_type_name = connection_type.type_name().to_string();
+pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
+    let connection_type_name = table.connection_type_name();
     let field_name = format!("all{}", to_pascal_case(table.name()));
     let tbl_schema = table.schema_name().to_string();
     let tbl_name = table.name().to_string();
@@ -143,12 +123,5 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
     .argument(InputValue::new("offset", TypeRef::named(TypeRef::INT)));
 
-    GeneratedQuery {
-        query_field,
-        condition_type: table.condition_type(),
-        condition_filter_types: table.condition_filter_types(),
-        order_by_enum,
-        connection_type,
-        edge_type,
-    }
+    query_field
 }
