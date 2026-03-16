@@ -70,7 +70,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
             let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
             FieldFuture::new(async move {
-                let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+                let table_ref = sql::quote_table(&tbl_schema, &tbl_name);
                 let mut select = Select::new(&table_ref, (*pool).clone());
 
                 if let Some(pairs) = condition_pairs {

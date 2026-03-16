@@ -14,6 +14,18 @@ use super::super::type_mapping::to_sql_scalar;
 
 use crate::error::gql_err;
 
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+pub(crate) fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name)
+}
+
+/// Builds a schema-qualified table reference: `"schema"."table"`.
+#[inline]
+pub(crate) fn quote_table(schema: &str, table: &str) -> String {
+    format!("\"{}\".\"{}\"", schema, table)
+}
+
 /// Applies GraphQL condition pairs to any query builder that implements
 /// [`WhereBuilder`].  Handles simple equality, operator objects
 /// (`equal`, `greaterThan`, …) and `in` lists.
@@ -33,7 +45,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
             continue;
         };
         let col = &columns[col_idx];
-        let quoted = format!("\"{}\"", col.name());
+        let quoted = quote_ident(col.name());
 
         if !matches!(gql_val, GqlValue::Object(_)) {
             if let Some(scalar) = to_sql_scalar(col, &gql_val) {
@@ -73,7 +85,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
                     FilterOp::Gte => Op::Gte,
                     FilterOp::Lt => Op::Lt,
                     FilterOp::Lte => Op::Lte,
-                    FilterOp::In => unreachable!(),
+                    FilterOp::In => continue,
                 };
 
                 if let Some(scalar) = to_sql_scalar(col, &op_val) {
@@ -113,7 +125,7 @@ pub(super) fn parse_order_by(
         let Some(&col_idx) = col_by_upper.get(col_upper) else {
             return Err(gql_err(format!("unknown column for ordering: {col_upper}")));
         };
-        result.push((format!("\"{}\"", columns[col_idx].name()), dir));
+        result.push((quote_ident(columns[col_idx].name()), dir));
     }
     Ok(result)
 }

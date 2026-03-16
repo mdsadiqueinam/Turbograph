@@ -14,7 +14,7 @@ use crate::db::transaction::with_transaction;
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
-use super::super::query::sql::apply_gql_conditions;
+use super::super::query::sql::{apply_gql_conditions, quote_ident, quote_table};
 use super::super::type_mapping::to_sql_scalar;
 
 fn db_err_to_gql(err: DbError) -> async_graphql::Error {
@@ -31,7 +31,7 @@ pub(super) async fn execute_create(
     col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let table_ref = quote_table(tbl_schema, tbl_name);
     let mut insert = Insert::new(&table_ref, pool.clone());
     insert.returning_all();
 
@@ -42,7 +42,7 @@ pub(super) async fn execute_create(
         };
         let col = &columns[idx];
         if let Some(scalar) = to_sql_scalar(col, val) {
-            row.insert(format!("\"{}\"", col.name()), Some(scalar));
+            row.insert(quote_ident(col.name()), Some(scalar));
         }
     }
 
@@ -79,7 +79,7 @@ pub(super) async fn execute_update(
     update_col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let table_ref = quote_table(tbl_schema, tbl_name);
     let mut update = Update::new(&table_ref, pool.clone());
     update.returning_all();
 
@@ -89,7 +89,7 @@ pub(super) async fn execute_update(
             continue;
         };
         let col = &columns[idx];
-        let quoted = format!("\"{}\"", col.name());
+        let quoted = quote_ident(col.name());
         if matches!(val, GqlValue::Null) {
             update.set(&quoted, None);
             has_set = true;
@@ -139,7 +139,7 @@ pub(super) async fn execute_delete(
     columns: &[Arc<Column>],
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let table_ref = quote_table(tbl_schema, tbl_name);
     let mut delete = Delete::new(&table_ref, pool.clone());
     delete.returning_all();
 
