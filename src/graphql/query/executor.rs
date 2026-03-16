@@ -5,9 +5,10 @@ use tokio_postgres::types::ToSql;
 use crate::db::error::DbError;
 use crate::db::JsonListExt;
 use crate::db::transaction::with_transaction;
+use crate::models::connection::{ConnectionPayload, EdgePayload};
 use crate::models::transaction::TransactionConfig;
 
-use super::super::connection::{ConnectionPayload, EdgePayload, encode_cursor};
+use super::super::connection::encode_cursor;
 use super::super::sql_scalar::SqlScalar;
 
 fn db_err_to_gql(err: DbError) -> async_graphql::Error {

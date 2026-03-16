@@ -9,7 +9,6 @@ use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
-use super::connection::make_connection_types;
 use super::filter::{make_condition_filter_types, make_condition_type, make_order_by_enum};
 use super::sql_scalar::SqlScalar;
 
@@ -47,7 +46,8 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     let condition_filter_types = make_condition_filter_types(&table);
     let condition_type = make_condition_type(&table);
     let order_by_enum = make_order_by_enum(&table);
-    let (connection_type, edge_type) = make_connection_types(&table);
+    let connection_type = table.connection_type();
+    let edge_type = table.edge_type();
 
     let connection_type_name = connection_type.type_name().to_string();
     let field_name = format!("all{}", to_pascal_case(table.name()));

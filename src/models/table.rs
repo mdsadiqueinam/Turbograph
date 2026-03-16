@@ -1,8 +1,9 @@
-use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, FieldValue, InputObject, InputValue, Object, TypeRef};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use tokio_postgres::types::Type;
 
+use super::connection::{ConnectionPayload, EdgePayload};
 use crate::graphql::condition_type_ref;
 use crate::utils::inflection::{singularize, to_pascal_case};
 
@@ -244,6 +245,88 @@ impl Table {
 
     pub fn edge_type_name(&self) -> String {
         format!("{}Edge", self.type_name())
+    }
+
+    pub fn edge_type(&self) -> Object {
+        let edge_type_name = self.edge_type_name();
+        let node_type = self.type_name();
+
+        Object::new(&edge_type_name)
+            .field(Field::new(
+                "cursor",
+                TypeRef::named_nn(TypeRef::STRING),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let edge = ctx.parent_value.try_downcast_ref::<EdgePayload>()?;
+                        Ok(Some(FieldValue::value(edge.cursor.clone())))
+                    })
+                },
+            ))
+            .field(Field::new("node", TypeRef::named_nn(node_type), |ctx| {
+                FieldFuture::new(async move {
+                    let edge = ctx.parent_value.try_downcast_ref::<EdgePayload>()?;
+                    Ok(Some(FieldValue::owned_any(edge.node.clone())))
+                })
+            }))
+    }
+
+    pub fn connection_type(&self) -> Object {
+        let type_name = self.type_name();
+        let edge_type_name = self.edge_type_name();
+        let connection_type_name = self.connection_type_name();
+
+        let edge_ref = edge_type_name.clone();
+        Object::new(&connection_type_name)
+            .field(Field::new(
+                "totalCount",
+                TypeRef::named_nn(TypeRef::INT),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        Ok(Some(FieldValue::value(payload.total_count as i32)))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "pageInfo",
+                TypeRef::named_nn("PageInfo"),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        Ok(Some(FieldValue::owned_any(payload.clone())))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "edges",
+                TypeRef::named_nn_list_nn(edge_ref),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        let list: Vec<FieldValue> = payload
+                            .edges
+                            .iter()
+                            .map(|e| FieldValue::owned_any(e.clone()))
+                            .collect();
+                        Ok(Some(FieldValue::list(list)))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "nodes",
+                TypeRef::named_nn_list_nn(type_name),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        let list: Vec<FieldValue> = payload
+                            .edges
+                            .iter()
+                            .map(|e| FieldValue::owned_any(e.node.clone()))
+                            .collect();
+                        Ok(Some(FieldValue::list(list)))
+                    })
+                },
+            ))
     }
 
     fn generate_condition_filter_type_name(&self, column: &Column) -> String {
