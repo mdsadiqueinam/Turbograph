@@ -1,7 +1,4 @@
-use async_graphql::dynamic::{Enum, EnumItem};
 use tokio_postgres::types::Type;
-
-use crate::models::table::Table;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterOp {
@@ -61,28 +58,9 @@ pub fn supports_range(column_type: &Type) -> bool {
     )
 }
 
-/// Builds the `{TypeName}OrderBy` enum (COLUMN_ASC / COLUMN_DESC per column).
-/// Exported so callers can register it with the schema separately.
-pub fn make_order_by_enum(table: &Table) -> Enum {
-    let name = format!("{}OrderBy", table.type_name());
-    table
-        .columns()
-        .iter()
-        .filter(|c| !c.omit_read())
-        .flat_map(|c| {
-            let upper = c.name().to_uppercase();
-            [
-                EnumItem::new(format!("{}_ASC", upper)),
-                EnumItem::new(format!("{}_DESC", upper)),
-            ]
-        })
-        .fold(Enum::new(name), |e, item| e.item(item))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::table::Table;
     use tokio_postgres::types::Type;
 
     // #[test]
@@ -96,18 +74,6 @@ mod tests {
     //     let table = Table::new_for_test("users", vec![]);
     //     assert_eq!(make_condition_type(&table).type_name(), "UserCondition");
     // }
-
-    #[test]
-    fn test_order_by_enum_name() {
-        let table = Table::new_for_test("blog_posts", vec![]);
-        assert_eq!(make_order_by_enum(&table).type_name(), "BlogPostOrderBy");
-    }
-
-    #[test]
-    fn test_order_by_enum_name_users() {
-        let table = Table::new_for_test("users", vec![]);
-        assert_eq!(make_order_by_enum(&table).type_name(), "UserOrderBy");
-    }
 
     #[test]
     fn test_filter_op_from_key_not_equal() {

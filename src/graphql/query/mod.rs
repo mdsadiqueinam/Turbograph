@@ -7,9 +7,8 @@ use deadpool_postgres::Pool;
 
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
-use crate::utils::inflection::to_pascal_case;
+use crate::utils::inflection::{to_pascal_case, to_screaming_snake_case};
 
-use super::filter::make_order_by_enum;
 use super::sql_scalar::SqlScalar;
 
 mod executor;
@@ -43,7 +42,7 @@ pub struct GeneratedQuery {
 /// ): UserConnection!
 /// ```
 pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
-    let order_by_enum = make_order_by_enum(&table);
+    let order_by_enum = table.order_by_enum();
     let connection_type = table.connection_type();
     let edge_type = table.edge_type();
 
@@ -56,7 +55,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     let (mut name_map, mut upper_map) = (HashMap::new(), HashMap::new());
     for (i, col) in columns.iter().enumerate().filter(|(_, c)| !c.omit_read()) {
         name_map.insert(col.name().to_string(), i);
-        upper_map.insert(col.name().to_uppercase(), i);
+        upper_map.insert(to_screaming_snake_case(col.name()), i);
     }
     let col_by_name = Arc::new(name_map);
     let col_by_upper = Arc::new(upper_map);
