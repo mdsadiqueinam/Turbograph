@@ -50,8 +50,6 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     let (connection_type, edge_type) = make_connection_types(&table);
 
     let connection_type_name = connection_type.type_name().to_string();
-    let condition_type_name = condition_type.type_name().to_string();
-    let order_by_type_name = order_by_enum.type_name().to_string();
     let field_name = format!("all{}", to_pascal_case(table.name()));
     let tbl_schema = table.schema_name().to_string();
     let tbl_name = table.name().to_string();
@@ -139,11 +137,11 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
     )
     .argument(InputValue::new(
         "condition",
-        TypeRef::named(condition_type_name),
+        TypeRef::named(table.condition_type_name()),
     ))
     .argument(InputValue::new(
         "orderBy",
-        TypeRef::named_list(order_by_type_name),
+        TypeRef::named_list(table.order_by_enum_name()),
     ))
     .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
     .argument(InputValue::new("offset", TypeRef::named(TypeRef::INT)));

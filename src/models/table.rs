@@ -1,7 +1,9 @@
+use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use tokio_postgres::types::Type;
 
+use crate::graphql::condition_type_ref;
 use crate::utils::inflection::{singularize, to_pascal_case};
 
 /// Omit is used to determine which operations (create, read, update, delete) should be omitted for a given table or column based on its comment.
@@ -227,6 +229,97 @@ impl Table {
     pub fn omit_delete(&self) -> bool {
         self.omit.delete || self.relkind == Relkind::MaterializedView
     }
+
+    pub fn condition_type_name(&self) -> String {
+        format!("{}Condition", self.type_name())
+    }
+
+    pub fn order_by_enum_name(&self) -> String {
+        format!("{}OrderBy", self.type_name())
+    }
+
+    pub fn connection_type_name(&self) -> String {
+        format!("{}Connection", self.type_name())
+    }
+
+    pub fn edge_type_name(&self) -> String {
+        format!("{}Edge", self.type_name())
+    }
+
+    fn generate_condition_filter_type_name(&self, column: &Column) -> String {
+        format!(
+            "{}{}Filter",
+            self.type_name(),
+            to_pascal_case(column.name())
+        )
+    }
+
+    pub fn condition_type(&self, column: &Column) -> InputObject {
+        self.columns().iter().filter(|c| !c.omit_read()).fold(
+            InputObject::new(self.condition_type_name()),
+            |obj, col| {
+                if condition_type_ref(col).is_some() {
+                    let filter_name = self.generate_condition_filter_type_name(col);
+                    obj.field(InputValue::new(
+                        col.name().as_str(),
+                        TypeRef::named(filter_name),
+                    ))
+                } else {
+                    obj
+                }
+            },
+        )
+    }
+
+    pub fn condition_filter_type(&self, column: &Column) -> Option<InputObject> {
+        condition_type_ref(column).map(|tr| {
+            let scalar_name = tr.to_string();
+            let filter_name = self.generate_condition_filter_type_name(column);
+
+            // example generated input object for a "email" column of type String:
+            // input UserEmailFilter {
+            //   equal: String
+            // }
+            let mut input = InputObject::new(filter_name)
+                .field(InputValue::new("equal", tr.clone()))
+                .field(InputValue::new("notEqual", tr.clone()))
+                .field(InputValue::new("in", TypeRef::named_list(scalar_name)));
+
+            if supports_range(column._type()) {
+                input = input
+                    .field(InputValue::new("greaterThan", tr.clone()))
+                    .field(InputValue::new("greaterThanEqual", tr.clone()))
+                    .field(InputValue::new("lessThan", tr.clone()))
+                    .field(InputValue::new("lessThanEqual", tr));
+            }
+
+            input
+        })
+    }
+
+    pub fn condition_filter_types(&self) -> Vec<InputObject> {
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_read())
+            .filter_map(|col| self.condition_filter_type(col))
+            .collect()
+    }
+}
+
+pub fn supports_range(column_type: &Type) -> bool {
+    matches!(
+        *column_type,
+        Type::INT2
+            | Type::INT4
+            | Type::INT8
+            | Type::FLOAT4
+            | Type::FLOAT8
+            | Type::NUMERIC
+            | Type::DATE
+            | Type::TIME
+            | Type::TIMESTAMP
+            | Type::TIMESTAMPTZ
+    )
 }
 
 #[cfg(test)]

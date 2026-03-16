@@ -90,8 +90,8 @@ pub fn make_page_info_type() -> Object {
 /// example: for a "User" table, generates "UserConnection" and "UserEdge" types with appropriate fields and resolvers.
 pub fn make_connection_types(table: &Table) -> (Object, Object) {
     let type_name = table.type_name();
-    let edge_type_name = format!("{}Edge", type_name);
-    let connection_type_name = format!("{}Connection", type_name);
+    let edge_type_name = table.edge_type_name();
+    let connection_type_name = table.connection_type_name();
 
     let node_type = type_name.clone();
     let edge = Object::new(&edge_type_name)
