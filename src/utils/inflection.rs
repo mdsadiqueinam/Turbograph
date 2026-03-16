@@ -84,6 +84,15 @@ pub fn to_pascal_case(text: &str) -> String {
     capitalize_first(&to_camel_case(text))
 }
 
+/// Convert a string to SCREAMING_SNAKE_CASE. It can handle PascalCase, camelCase, and kebab-case.
+/// Examples:
+/// - "PascalCase" -> "PASCAL_CASE"
+/// - "camelCase" -> "CAMEL_CASE"
+/// - "kebab-case" -> "KEBAB_CASE"
+pub fn to_screaming_snake_case(text: &str) -> String {
+    to_snake_case(text).to_uppercase()
+}
+
 pub fn singularize(text: &str) -> String {
     pluralizer::pluralize(text, 1, false)
 }

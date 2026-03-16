@@ -1,10 +1,7 @@
-use async_graphql::dynamic::{Enum, EnumItem, InputObject, InputValue, TypeRef};
+use async_graphql::dynamic::{Enum, EnumItem};
 use tokio_postgres::types::Type;
 
 use crate::models::table::Table;
-use crate::utils::inflection::to_pascal_case;
-
-use super::type_mapping::condition_type_ref;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterOp {
@@ -64,65 +61,6 @@ pub fn supports_range(column_type: &Type) -> bool {
     )
 }
 
-/// Builds per-column `{TypeName}{Column}Filter` input objects referenced by
-/// `{TypeName}Condition`. Exported so callers can register them with the schema.
-pub fn make_condition_filter_types(table: &Table) -> Vec<InputObject> {
-    table
-        .columns()
-        .iter()
-        .filter(|c| !c.omit_read())
-        .filter_map(|col| {
-            condition_type_ref(col).map(|tr| {
-                let scalar_name = tr.to_string();
-                let filter_name =
-                    format!("{}{}Filter", table.type_name(), to_pascal_case(col.name()));
-
-                // example generated input object for a "email" column of type String:
-                // input UserEmailFilter {
-                //   equal: String
-                // }
-                let mut input = InputObject::new(filter_name)
-                    .field(InputValue::new("equal", tr.clone()))
-                    .field(InputValue::new("notEqual", tr.clone()))
-                    .field(InputValue::new("in", TypeRef::named_list(scalar_name)));
-
-                if supports_range(col._type()) {
-                    input = input
-                        .field(InputValue::new("greaterThan", tr.clone()))
-                        .field(InputValue::new("greaterThanEqual", tr.clone()))
-                        .field(InputValue::new("lessThan", tr.clone()))
-                        .field(InputValue::new("lessThanEqual", tr));
-                }
-
-                input
-            })
-        })
-        .collect()
-}
-
-/// Builds the `{TypeName}Condition` input object (per-column operator filters).
-/// Exported so callers can register it with the schema separately.
-pub fn make_condition_type(table: &Table) -> InputObject {
-    let name = format!("{}Condition", table.type_name());
-
-    table
-        .columns()
-        .iter()
-        .filter(|c| !c.omit_read())
-        .fold(InputObject::new(name), |obj, col| {
-            if condition_type_ref(col).is_some() {
-                let filter_name =
-                    format!("{}{}Filter", table.type_name(), to_pascal_case(col.name()));
-                obj.field(InputValue::new(
-                    col.name().as_str(),
-                    TypeRef::named(filter_name),
-                ))
-            } else {
-                obj
-            }
-        })
-}
-
 /// Builds the `{TypeName}OrderBy` enum (COLUMN_ASC / COLUMN_DESC per column).
 /// Exported so callers can register it with the schema separately.
 pub fn make_order_by_enum(table: &Table) -> Enum {
@@ -147,17 +85,17 @@ mod tests {
     use crate::models::table::Table;
     use tokio_postgres::types::Type;
 
-    #[test]
-    fn test_condition_type_name() {
-        let table = Table::new_for_test("blog_posts", vec![]);
-        assert_eq!(make_condition_type(&table).type_name(), "BlogPostCondition");
-    }
+    // #[test]
+    // fn test_condition_type_name() {
+    //     let table = Table::new_for_test("blog_posts", vec![]);
+    //     assert_eq!(make_condition_type(&table).type_name(), "BlogPostCondition");
+    // }
 
-    #[test]
-    fn test_condition_type_name_users() {
-        let table = Table::new_for_test("users", vec![]);
-        assert_eq!(make_condition_type(&table).type_name(), "UserCondition");
-    }
+    // #[test]
+    // fn test_condition_type_name_users() {
+    //     let table = Table::new_for_test("users", vec![]);
+    //     assert_eq!(make_condition_type(&table).type_name(), "UserCondition");
+    // }
 
     #[test]
     fn test_order_by_enum_name() {

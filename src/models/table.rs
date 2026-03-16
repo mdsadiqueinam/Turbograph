@@ -1,11 +1,13 @@
-use async_graphql::dynamic::{Field, FieldFuture, FieldValue, InputObject, InputValue, Object, TypeRef};
+use async_graphql::dynamic::{
+    Enum, EnumItem, Field, FieldFuture, FieldValue, InputObject, InputValue, Object, TypeRef,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use tokio_postgres::types::Type;
 
 use super::connection::{ConnectionPayload, EdgePayload};
 use crate::graphql::condition_type_ref;
-use crate::utils::inflection::{singularize, to_pascal_case};
+use crate::utils::inflection::{singularize, to_pascal_case, to_screaming_snake_case};
 
 /// Omit is used to determine which operations (create, read, update, delete) should be omitted for a given table or column based on its comment.
 /// The comment can contain an @omit annotation followed by a comma-separated list of operations to omit. For example:
@@ -337,7 +339,7 @@ impl Table {
         )
     }
 
-    pub fn condition_type(&self, column: &Column) -> InputObject {
+    pub fn condition_type(&self) -> InputObject {
         self.columns().iter().filter(|c| !c.omit_read()).fold(
             InputObject::new(self.condition_type_name()),
             |obj, col| {
@@ -386,6 +388,23 @@ impl Table {
             .filter(|c| !c.omit_read())
             .filter_map(|col| self.condition_filter_type(col))
             .collect()
+    }
+
+    pub fn order_by_enum(&self) -> Enum {
+        let name = self.order_by_enum_name();
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_read())
+            .fold(Enum::new(name), |e, col| {
+                e.item(EnumItem::new(format!(
+                    "{}_ASC",
+                    to_screaming_snake_case(col.name())
+                )))
+                .item(EnumItem::new(format!(
+                    "{}_DESC",
+                    to_screaming_snake_case(col.name())
+                )))
+            })
     }
 }
 

@@ -9,7 +9,7 @@ use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
-use super::filter::{make_condition_filter_types, make_condition_type, make_order_by_enum};
+use super::filter::make_order_by_enum;
 use super::sql_scalar::SqlScalar;
 
 mod executor;
@@ -43,8 +43,6 @@ pub struct GeneratedQuery {
 /// ): UserConnection!
 /// ```
 pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
-    let condition_filter_types = make_condition_filter_types(&table);
-    let condition_type = make_condition_type(&table);
     let order_by_enum = make_order_by_enum(&table);
     let connection_type = table.connection_type();
     let edge_type = table.edge_type();
@@ -148,8 +146,8 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
 
     GeneratedQuery {
         query_field,
-        condition_type,
-        condition_filter_types,
+        condition_type: table.condition_type(),
+        condition_filter_types: table.condition_filter_types(),
         order_by_enum,
         connection_type,
         edge_type,
