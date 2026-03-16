@@ -96,14 +96,14 @@ impl<O> Select<O> {
         }
     }
 
-    fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    pub fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
             .map(|p| p as &(dyn ToSql + Sync))
             .collect()
     }
 
-    fn select_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    pub fn select_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         let mut params = self.where_params();
         if let Some(limit) = &self.limit {
             params.push(limit as &(dyn ToSql + Sync));

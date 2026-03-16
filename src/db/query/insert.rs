@@ -19,6 +19,7 @@ pub struct Insert {
     params: Vec<Option<SqlScalar>>,
     pool: Pool,
     values: Vec<HashMap<String, Option<SqlScalar>>>,
+    returning: bool,
 }
 
 // ── QueryBase (no SupportsWhere) ──────────────────────────────────────────────
@@ -46,7 +47,14 @@ impl Insert {
             params: Vec::new(),
             pool,
             values: Vec::new(),
+            returning: false,
         }
+    }
+
+    /// Append `RETURNING *` to the generated SQL.
+    pub fn returning_all(&mut self) -> &mut Self {
+        self.returning = true;
+        self
     }
 
     /// Add a row of values to insert.
@@ -55,7 +63,7 @@ impl Insert {
         self
     }
 
-    fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    pub fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         let mut params: Vec<&(dyn ToSql + Sync)> = Vec::new();
         for row in &self.values {
             for val in row.values() {
@@ -75,34 +83,39 @@ impl Insert {
     }
 
     pub fn get_query(&self) -> String {
-        if self.values.is_empty() {
-            return format!("INSERT INTO {} DEFAULT VALUES", self.table);
-        }
+        let mut q = if self.values.is_empty() {
+            format!("INSERT INTO {} DEFAULT VALUES", self.table)
+        } else {
+            let columns = self.columns();
+            let col_list = columns
+                .iter()
+                .map(|c| c.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
 
-        let columns = self.columns();
-        let col_list = columns
-            .iter()
-            .map(|c| c.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+            let mut q = format!("INSERT INTO {} ({col_list}) VALUES ", self.table);
+            let num_cols = columns.len();
+            let mut param_idx = 1;
 
-        let mut q = format!("INSERT INTO {} ({col_list}) VALUES ", self.table);
-        let num_cols = columns.len();
-        let mut param_idx = 1;
-
-        for (row_idx, _row) in self.values.iter().enumerate() {
-            if row_idx > 0 {
-                q.push_str(", ");
-            }
-            q.push('(');
-            for col_idx in 0..num_cols {
-                if col_idx > 0 {
+            for (row_idx, _row) in self.values.iter().enumerate() {
+                if row_idx > 0 {
                     q.push_str(", ");
                 }
-                write!(q, "${param_idx}").unwrap();
-                param_idx += 1;
+                q.push('(');
+                for col_idx in 0..num_cols {
+                    if col_idx > 0 {
+                        q.push_str(", ");
+                    }
+                    write!(q, "${param_idx}").unwrap();
+                    param_idx += 1;
+                }
+                q.push(')');
             }
-            q.push(')');
+            q
+        };
+
+        if self.returning {
+            q.push_str(" RETURNING *");
         }
 
         q

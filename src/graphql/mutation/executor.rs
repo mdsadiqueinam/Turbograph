@@ -4,16 +4,17 @@ use std::sync::Arc;
 use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::FieldValue;
 use deadpool_postgres::Pool;
-use tokio_postgres::types::ToSql;
 
 use crate::db::error::DbError;
+use crate::db::query::delete::Delete;
+use crate::db::query::insert::Insert;
+use crate::db::query::update::Update;
 use crate::db::{JsonExt, JsonListExt};
 use crate::db::transaction::with_transaction;
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
-use super::super::query::sql::build_where_clause;
-use super::super::sql_scalar::SqlScalar;
+use super::super::query::sql::apply_gql_conditions;
 use super::super::type_mapping::to_sql_scalar;
 
 fn db_err_to_gql(err: DbError) -> async_graphql::Error {
@@ -30,41 +31,33 @@ pub(super) async fn execute_create(
     col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let mut col_parts = Vec::new();
-    let mut placeholders = Vec::new();
-    let mut params = Vec::<SqlScalar>::new();
+    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let mut insert = Insert::new(&table_ref, pool.clone());
+    insert.returning_all();
 
+    let mut row = HashMap::new();
     for (key, val) in &input {
         let Some(&idx) = col_map.get(key) else {
             continue;
         };
         let col = &columns[idx];
         if let Some(scalar) = to_sql_scalar(col, val) {
-            col_parts.push(format!("\"{}\"", col.name()));
-            params.push(scalar);
-            placeholders.push(format!("${}", params.len()));
+            row.insert(format!("\"{}\"", col.name()), Some(scalar));
         }
     }
 
-    if col_parts.is_empty() {
+    if row.is_empty() {
         return Err(async_graphql::Error::new("No valid columns provided for insert"));
     }
 
-    let sql = format!(
-        "INSERT INTO \"{}\".\"{}\" ({}) VALUES ({}) RETURNING *",
-        tbl_schema,
-        tbl_name,
-        col_parts.join(", "),
-        placeholders.join(", "),
-    );
+    insert.values(row);
+    let sql = insert.get_query();
 
     with_transaction(pool, tx_config, |client| {
         Box::pin(async move {
-            let refs: Vec<&(dyn ToSql + Sync)> =
-                params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
-
+            let params = insert.all_params();
             let row = client
-                .query_one(&sql, &refs)
+                .query_one(&sql, &params)
                 .await
                 .map_err(|e| DbError::Query(format!("INSERT error: {e}")))?;
 
@@ -86,50 +79,41 @@ pub(super) async fn execute_update(
     update_col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    // Build SET clause first — params are numbered $1..$M
-    let mut set_parts = Vec::new();
-    let mut params = Vec::<SqlScalar>::new();
+    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let mut update = Update::new(&table_ref, pool.clone());
+    update.returning_all();
 
+    let mut has_set = false;
     for (key, val) in &patch {
         let Some(&idx) = update_col_map.get(key) else {
             continue;
         };
         let col = &columns[idx];
+        let quoted = format!("\"{}\"", col.name());
         if matches!(val, GqlValue::Null) {
-            // Explicit null → SET column = NULL (no param needed)
-            set_parts.push(format!("\"{}\" = NULL", col.name()));
+            update.set(&quoted, None);
+            has_set = true;
         } else if let Some(scalar) = to_sql_scalar(col, val) {
-            params.push(scalar);
-            set_parts.push(format!("\"{}\" = ${}", col.name(), params.len()));
+            update.set(&quoted, Some(scalar));
+            has_set = true;
         }
     }
 
-    if set_parts.is_empty() {
+    if !has_set {
         return Err(async_graphql::Error::new("No valid columns provided for update"));
     }
 
-    // Build WHERE clause — params continue numbering from $M+1
-    let mut where_clause = String::new();
     if let Some(pairs) = condition {
-        build_where_clause(&mut where_clause, &mut params, pairs, columns)?;
+        apply_gql_conditions(&mut update, pairs, columns)?;
     }
 
-    let mut sql = format!(
-        "UPDATE \"{}\".\"{}\" SET {}",
-        tbl_schema,
-        tbl_name,
-        set_parts.join(", "),
-    );
-    sql.push_str(&where_clause);
-    sql.push_str(" RETURNING *");
+    let sql = update.get_query();
 
     with_transaction(pool, tx_config, |client| {
         Box::pin(async move {
-            let refs: Vec<&(dyn ToSql + Sync)> =
-                params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
-
+            let params = update.all_params();
             let rows = client
-                .query(&sql, &refs)
+                .query(&sql, &params)
                 .await
                 .map_err(|e| DbError::Query(format!("UPDATE error: {e}")))?;
 
@@ -155,24 +139,21 @@ pub(super) async fn execute_delete(
     columns: &[Arc<Column>],
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let mut params = Vec::<SqlScalar>::new();
-    let mut where_clause = String::new();
+    let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+    let mut delete = Delete::new(&table_ref, pool.clone());
+    delete.returning_all();
 
     if let Some(pairs) = condition {
-        build_where_clause(&mut where_clause, &mut params, pairs, columns)?;
+        apply_gql_conditions(&mut delete, pairs, columns)?;
     }
 
-    let mut sql = format!("DELETE FROM \"{}\".\"{}\"", tbl_schema, tbl_name);
-    sql.push_str(&where_clause);
-    sql.push_str(" RETURNING *");
+    let sql = delete.get_query();
 
     with_transaction(pool, tx_config, |client| {
         Box::pin(async move {
-            let refs: Vec<&(dyn ToSql + Sync)> =
-                params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
-
+            let params = delete.where_params();
             let rows = client
-                .query(&sql, &refs)
+                .query(&sql, &params)
                 .await
                 .map_err(|e| DbError::Query(format!("DELETE error: {e}")))?;
 

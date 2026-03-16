@@ -19,6 +19,7 @@ pub struct Update {
     where_clause: String,
     pool: Pool,
     values: HashMap<String, Option<SqlScalar>>,
+    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -44,7 +45,14 @@ impl Update {
             where_clause: String::new(),
             pool,
             values: HashMap::new(),
+            returning: false,
         }
+    }
+
+    /// Append `RETURNING *` to the generated SQL.
+    pub fn returning_all(&mut self) -> &mut Self {
+        self.returning = true;
+        self
     }
 
     /// Set a column to a value. These become the `SET col=$N` assignments.
@@ -53,7 +61,7 @@ impl Update {
         self
     }
 
-    fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    pub fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         // SET params come first, then WHERE params
         let mut params: Vec<&(dyn ToSql + Sync)> = self
             .values
@@ -90,6 +98,10 @@ impl Update {
             let shift = self.values.len();
             let shifted_where = shift_param_indices(&self.where_clause, shift);
             q.push_str(&shifted_where);
+        }
+
+        if self.returning {
+            q.push_str(" RETURNING *");
         }
 
         q

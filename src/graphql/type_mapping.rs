@@ -5,7 +5,7 @@ use tokio_postgres::types::Type;
 
 use crate::models::table::Column;
 
-use super::sql_scalar::SqlScalar;
+use crate::db::scalar::SqlScalar;
 
 pub(crate) fn get_field_value<'a>(
     column: &Column,
@@ -244,7 +244,7 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
 
 #[cfg(test)]
 mod tests {
-    use super::super::sql_scalar::SqlScalar;
+    use crate::db::scalar::SqlScalar;
     use super::*;
     use crate::models::table::Column;
     use async_graphql::Value as GqlValue;

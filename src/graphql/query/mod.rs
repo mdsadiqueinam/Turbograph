@@ -4,14 +4,18 @@ use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, TypeRef};
 use deadpool_postgres::Pool;
 
+use crate::db::error::DbError;
+use crate::db::query::select::{OrderDirection, Select};
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
-use super::sql_scalar::SqlScalar;
-
 mod executor;
 pub(crate) mod sql;
+
+fn db_err_to_gql(err: DbError) -> async_graphql::Error {
+    async_graphql::Error::new(err.to_string())
+}
 
 /// Generates a root Query field (e.g. `allUsers`) with Turbograph-style
 /// filtering arguments:
@@ -66,37 +70,55 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
             let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
             FieldFuture::new(async move {
-                let mut where_clause = String::new();
-                let mut params = Vec::<SqlScalar>::with_capacity(8);
+                let table_ref = format!("\"{}\".\"{}\""  , tbl_schema, tbl_name);
+                let mut select = Select::new(&table_ref, (*pool).clone());
 
                 if let Some(pairs) = condition_pairs {
-                    sql::build_where_clause(
-                        &mut where_clause,
-                        &mut params,
-                        pairs,
-                        &columns,
-                    )?;
+                    sql::apply_gql_conditions(&mut select, pairs, &columns)?;
                 }
 
-                let mut order_clause = String::new();
-                sql::build_order_by_clause(&mut order_clause, &order_by, &columns)?;
+                let order_pairs = sql::parse_order_by(&order_by, &columns)?;
+                let safe_limit = first.unwrap_or(100).clamp(1, 1000) as i32;
+                let off = offset.unwrap_or(0).max(0) as i32;
 
-                let safe_limit = first.unwrap_or(100).clamp(1, 1000);
-                let off = offset.unwrap_or(0).max(0);
+                let (total_count, json_rows) = if !order_pairs.is_empty() {
+                    let first_pair = &order_pairs[0];
+                    let dir = if first_pair.1 == "DESC" {
+                        OrderDirection::Desc
+                    } else {
+                        OrderDirection::Asc
+                    };
+                    let mut ordered = select.order_by(&first_pair.0, dir);
 
-                executor::execute_connection_query(
-                    &pool,
-                    &tbl_schema,
-                    &tbl_name,
-                    &where_clause,
-                    &order_clause,
-                    params,
-                    safe_limit,
-                    off,
+                    for (col, d) in &order_pairs[1..] {
+                        let direction = if *d == "DESC" {
+                            OrderDirection::Desc
+                        } else {
+                            OrderDirection::Asc
+                        };
+                        ordered = ordered.order_by(col, direction);
+                    }
+                    ordered
+                        .limit(safe_limit)
+                        .offset(off)
+                        .execute(tx_config)
+                        .await
+                        .map_err(db_err_to_gql)?
+                } else {
+                    select
+                        .limit(safe_limit)
+                        .offset(off)
+                        .execute(tx_config)
+                        .await
+                        .map_err(db_err_to_gql)?
+                };
+
+                Ok(executor::build_connection_payload(
+                    total_count,
+                    json_rows,
                     &order_by,
-                    tx_config,
-                )
-                .await
+                    off as i64,
+                ))
             })
         },
     )

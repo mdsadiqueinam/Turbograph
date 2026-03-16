@@ -3,7 +3,6 @@ mod entity;
 mod filter;
 pub(crate) mod mutation;
 pub(crate) mod query;
-mod sql_scalar;
 mod type_mapping;
 
 pub(crate) use connection::make_page_info_type;

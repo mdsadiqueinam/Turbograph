@@ -15,6 +15,7 @@ pub struct Delete {
     params: Vec<Option<SqlScalar>>,
     where_clause: String,
     pool: Pool,
+    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -39,10 +40,17 @@ impl Delete {
             params: Vec::new(),
             where_clause: String::new(),
             pool,
+            returning: false,
         }
     }
 
-    fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    /// Append `RETURNING *` to the generated SQL.
+    pub fn returning_all(&mut self) -> &mut Self {
+        self.returning = true;
+        self
+    }
+
+    pub fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
             .map(|p| p as &(dyn ToSql + Sync))
@@ -50,11 +58,17 @@ impl Delete {
     }
 
     pub fn get_query(&self) -> String {
-        if self.where_clause.is_empty() {
+        let mut q = if self.where_clause.is_empty() {
             format!("DELETE FROM {}", self.table)
         } else {
             format!("DELETE FROM {}{}", self.table, self.where_clause)
+        };
+
+        if self.returning {
+            q.push_str(" RETURNING *");
         }
+
+        q
     }
 
     pub async fn execute(
