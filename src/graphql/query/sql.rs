@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_graphql::Value as GqlValue;
 
 use crate::models::table::Column;
+use crate::utils::inflection::to_screaming_snake_case;
 
 use super::super::filter::{FilterOp, supports_range};
 use super::super::sql_scalar::SqlScalar;
@@ -17,8 +18,13 @@ pub(crate) fn build_where_clause(
     params: &mut Vec<SqlScalar>,
     pairs: Vec<(String, GqlValue)>,
     columns: &[Arc<Column>],
-    col_by_name: &HashMap<String, usize>,
 ) -> Result<(), async_graphql::Error> {
+    let col_by_name: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.name().to_string(), i))
+        .collect();
+
     let mut has_where = false;
 
     for (key, gql_val) in pairs {
@@ -106,11 +112,17 @@ pub(super) fn build_order_by_clause(
     sql: &mut String,
     order_by: &[String],
     columns: &[Arc<Column>],
-    col_by_upper: &HashMap<String, usize>,
 ) -> Result<(), async_graphql::Error> {
     if order_by.is_empty() {
         return Ok(());
     }
+
+    let col_by_upper: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (to_screaming_snake_case(c.name()), i))
+        .collect();
+
     sql.push_str(" ORDER BY ");
     for (i, s) in order_by.iter().enumerate() {
         let (col_upper, dir) = if let Some(c) = s.strip_suffix("_DESC") {

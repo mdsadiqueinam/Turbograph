@@ -84,7 +84,6 @@ pub(super) async fn execute_update(
     condition: Option<Vec<(String, GqlValue)>>,
     columns: &[Arc<Column>],
     update_col_map: &HashMap<String, usize>,
-    cond_col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     // Build SET clause first — params are numbered $1..$M
@@ -112,7 +111,7 @@ pub(super) async fn execute_update(
     // Build WHERE clause — params continue numbering from $M+1
     let mut where_clause = String::new();
     if let Some(pairs) = condition {
-        build_where_clause(&mut where_clause, &mut params, pairs, columns, cond_col_map)?;
+        build_where_clause(&mut where_clause, &mut params, pairs, columns)?;
     }
 
     let mut sql = format!(
@@ -154,14 +153,13 @@ pub(super) async fn execute_delete(
     tbl_name: &str,
     condition: Option<Vec<(String, GqlValue)>>,
     columns: &[Arc<Column>],
-    cond_col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     let mut params = Vec::<SqlScalar>::new();
     let mut where_clause = String::new();
 
     if let Some(pairs) = condition {
-        build_where_clause(&mut where_clause, &mut params, pairs, columns, cond_col_map)?;
+        build_where_clause(&mut where_clause, &mut params, pairs, columns)?;
     }
 
     let mut sql = format!("DELETE FROM \"{}\".\"{}\"", tbl_schema, tbl_name);

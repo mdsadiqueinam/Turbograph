@@ -35,14 +35,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
 
     // Column indices used for condition WHERE clauses (reuses {Type}Condition)
     let all_columns: Arc<Vec<Arc<Column>>> = Arc::new(table.columns().to_vec());
-    let cond_col_map: Arc<HashMap<String, usize>> = Arc::new(
-        all_columns
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| !c.omit_read() && condition_type_ref(c).is_some())
-            .map(|(i, c)| (c.name().to_string(), i))
-            .collect(),
-    );
 
     // ── CREATE ────────────────────────────────────────────────────────────
     if !table.omit_create() {
@@ -126,7 +118,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
 
         let update_col_map = Arc::new(update_col_map);
         let cols = all_columns.clone();
-        let cm = cond_col_map.clone();
         let p = pool.clone();
         let s = tbl_schema.clone();
         let n = tbl_name.clone();
@@ -163,7 +154,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
                 let name = n.clone();
                 let columns = cols.clone();
                 let ucm = update_col_map.clone();
-                let ccm = cm.clone();
                 let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
                 FieldFuture::new(async move {
@@ -175,7 +165,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
                         condition_pairs,
                         &columns,
                         &ucm,
-                        &ccm,
                         tx_config,
                     )
                     .await
@@ -192,7 +181,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
     // ── DELETE ─────────────────────────────────────────────────────────────
     if !table.omit_delete() {
         let cols = all_columns.clone();
-        let cm = cond_col_map.clone();
         let p = pool.clone();
         let s = tbl_schema;
         let n = tbl_name;
@@ -216,7 +204,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
                 let schema = s.clone();
                 let name = n.clone();
                 let columns = cols.clone();
-                let ccm = cm.clone();
                 let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
                 FieldFuture::new(async move {
@@ -226,7 +213,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
                         &name,
                         condition_pairs,
                         &columns,
-                        &ccm,
                         tx_config,
                     )
                     .await
