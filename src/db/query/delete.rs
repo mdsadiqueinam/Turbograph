@@ -1,3 +1,4 @@
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
@@ -125,13 +126,15 @@ mod tests {
 
     #[test]
     fn test_delete_simple() {
-        let q = Delete::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.delete("users");
         assert_eq!(q.get_query(), "DELETE FROM users");
     }
 
     #[test]
     fn test_delete_with_where() {
-        let mut q = Delete::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.delete("users");
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
         let sql = q.get_query();
         assert!(sql.starts_with("DELETE FROM users"));
@@ -141,7 +144,8 @@ mod tests {
 
     #[test]
     fn test_delete_with_complex_where() {
-        let mut q = Delete::new("sessions", test_pool());
+        let pool = test_pool();
+        let mut q = pool.delete("sessions");
         q.where_block(|q| {
             q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
             q.or_where_clause("id", Op::Eq, Some(SqlScalar::Int4(2)));
@@ -158,7 +162,8 @@ mod tests {
 
     #[test]
     fn test_delete_schema_qualified() {
-        let q = Delete::new("public.logs", test_pool());
+        let pool = test_pool();
+        let q = pool.delete("public.logs");
         assert!(q.get_query().contains("public.logs"));
     }
 }

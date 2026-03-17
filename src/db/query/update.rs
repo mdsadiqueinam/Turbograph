@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
@@ -192,13 +193,15 @@ mod tests {
 
     #[test]
     fn test_update_simple() {
-        let q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.update("users");
         assert_eq!(q.get_query(), "UPDATE users");
     }
 
     #[test]
     fn test_update_with_set() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         let sql = q.get_query();
         assert!(sql.starts_with("UPDATE users SET"));
@@ -207,7 +210,8 @@ mod tests {
 
     #[test]
     fn test_update_with_set_and_where() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(5)));
         let sql = q.get_query();
@@ -221,7 +225,8 @@ mod tests {
 
     #[test]
     fn test_update_with_multiple_set() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Bob".into())));
         q.set("age", Some(SqlScalar::Int4(30)));
         let sql = q.get_query();

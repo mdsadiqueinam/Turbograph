@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
@@ -173,13 +174,15 @@ mod tests {
 
     #[test]
     fn test_insert_default_values() {
-        let q = Insert::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.insert("users");
         assert_eq!(q.get_query(), "INSERT INTO users DEFAULT VALUES");
     }
 
     #[test]
     fn test_insert_single_row() {
-        let mut q = Insert::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.insert("users");
         let mut row = HashMap::new();
         row.insert("name".to_string(), Some(SqlScalar::Text("Alice".into())));
         row.insert("age".to_string(), Some(SqlScalar::Int4(30)));
@@ -194,7 +197,8 @@ mod tests {
 
     #[test]
     fn test_insert_multiple_rows() {
-        let mut q = Insert::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.insert("users");
 
         let mut row1 = HashMap::new();
         row1.insert("name".to_string(), Some(SqlScalar::Text("Alice".into())));
@@ -212,7 +216,8 @@ mod tests {
 
     #[test]
     fn test_insert_schema_qualified() {
-        let q = Insert::new("public.users", test_pool());
+        let pool = test_pool();
+        let q = pool.insert("public.users");
         assert!(q.get_query().contains("public.users"));
     }
 }

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use std::marker::PhantomData;
 
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use crate::db::JsonListExt;
@@ -248,14 +249,16 @@ mod tests {
 
     #[test]
     fn test_select_simple() {
-        let q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.select("users");
         assert_eq!(q.get_select_query(), "SELECT * FROM users");
         assert_eq!(q.get_count_query(), "SELECT COUNT(*) FROM users");
     }
 
     #[test]
     fn test_select_with_where() {
-        let mut q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("users");
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(42)));
         let sql = q.get_select_query();
         assert!(sql.starts_with("SELECT * FROM users"));
@@ -265,7 +268,8 @@ mod tests {
 
     #[test]
     fn test_select_with_multiple_where() {
-        let mut q = Select::new("orders", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("orders");
         q.where_clause("status", Op::Eq, Some(SqlScalar::Text("active".into())));
         q.where_clause("amount", Op::Gt, Some(SqlScalar::Int4(100)));
         let sql = q.get_select_query();
@@ -276,7 +280,8 @@ mod tests {
 
     #[test]
     fn test_select_with_or_where() {
-        let mut q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("users");
         q.where_clause("status", Op::Eq, Some(SqlScalar::Text("active".into())));
         q.or_where_clause("status", Op::Eq, Some(SqlScalar::Text("pending".into())));
         let sql = q.get_select_query();
@@ -286,7 +291,8 @@ mod tests {
 
     #[test]
     fn test_select_with_where_block() {
-        let mut q = Select::new("products", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("products");
         q.where_block(|q| {
             q.where_clause("id", Op::Gt, Some(SqlScalar::Int4(1)));
             q.or_where_clause("id", Op::Lt, Some(SqlScalar::Int4(100)));
@@ -300,19 +306,22 @@ mod tests {
 
     #[test]
     fn test_select_with_limit() {
-        let q = Select::new("users", test_pool()).limit(10);
+        let pool = test_pool();
+        let q = pool.select("users").limit(10);
         assert!(q.get_select_query().contains("LIMIT $1"));
     }
 
     #[test]
     fn test_select_with_offset() {
-        let q = Select::new("users", test_pool()).offset(20);
+        let pool = test_pool();
+        let q = pool.select("users").offset(20);
         assert!(q.get_select_query().contains("OFFSET $1"));
     }
 
     #[test]
     fn test_select_with_limit_and_offset() {
-        let q = Select::new("users", test_pool()).limit(10).offset(20);
+        let pool = test_pool();
+        let q = pool.select("users").limit(10).offset(20);
         let sql = q.get_select_query();
         let limit_pos = sql.find("LIMIT").expect("no LIMIT");
         let offset_pos = sql.find("OFFSET").expect("no OFFSET");
@@ -321,7 +330,8 @@ mod tests {
 
     #[test]
     fn test_select_with_where_limit_offset() {
-        let mut q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("users");
         q.where_clause("active", Op::Eq, Some(SqlScalar::Bool(true)));
         let q = q.limit(10).offset(5);
         let sql = q.get_select_query();
@@ -338,13 +348,15 @@ mod tests {
 
     #[test]
     fn test_select_no_order() {
-        let q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.select("users");
         assert_eq!(q.get_order_clause(), "");
     }
 
     #[test]
     fn test_select_single_order() {
-        let q = Select::new("users", test_pool())
+        let pool = test_pool();
+        let q = pool.select("users")
             .order_by("name", OrderDirection::Asc);
         let clause = q.get_order_clause();
         assert!(clause.contains("ORDER BY"));
@@ -353,7 +365,8 @@ mod tests {
 
     #[test]
     fn test_select_multiple_order() {
-        let q = Select::new("users", test_pool())
+        let pool = test_pool();
+        let q = pool.select("users")
             .order_by("created_at", OrderDirection::Desc)
             .order_by("id", OrderDirection::Asc);
         let clause = q.get_order_clause();
@@ -364,14 +377,16 @@ mod tests {
 
     #[test]
     fn test_select_order_appears_in_query() {
-        let q = Select::new("posts", test_pool())
+        let pool = test_pool();
+        let q = pool.select("posts")
             .order_by("date", OrderDirection::Desc);
         assert!(q.get_select_query().contains("ORDER BY date DESC"));
     }
 
     #[test]
     fn test_select_order_before_limit() {
-        let q = Select::new("posts", test_pool())
+        let pool = test_pool();
+        let q = pool.select("posts")
             .order_by("id", OrderDirection::Asc)
             .limit(10);
         let sql = q.get_select_query();
@@ -380,7 +395,8 @@ mod tests {
 
     #[test]
     fn test_select_full_pipeline() {
-        let mut q = Select::new("orders", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("orders");
         q.where_clause("status", Op::Eq, Some(SqlScalar::Text("paid".into())));
         let q = q
             .order_by("created_at", OrderDirection::Desc)
@@ -403,7 +419,8 @@ mod tests {
 
     #[test]
     fn test_count_query_with_where() {
-        let mut q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("users");
         q.where_clause("active", Op::Eq, Some(SqlScalar::Bool(true)));
         let sql = q.get_count_query();
         assert!(sql.starts_with("SELECT COUNT(*) FROM users"));
@@ -412,13 +429,15 @@ mod tests {
 
     #[test]
     fn test_schema_qualified() {
-        let q = Select::new("public.users", test_pool());
+        let pool = test_pool();
+        let q = pool.select("public.users");
         assert!(q.get_select_query().contains("public.users"));
     }
 
     #[test]
     fn test_where_is_null() {
-        let mut q = Select::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.select("users");
         q.where_clause("deleted_at", Op::Eq, None);
         assert!(q.get_select_query().contains("deleted_at IS"));
     }
