@@ -35,6 +35,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          settings: "claude/settings.json"
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
@@ -56,13 +57,3 @@ jobs:
           #       "NODE_ENV": "test"
           #     }
           #   }
-        env:
-          ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_AUTH_TOKEN }}
-          API_TIMEOUT_MS: "3000000"
-          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-          ANTHROPIC_MODEL: MiniMax-M2.5
-          ANTHROPIC_SMALL_FAST_MODEL: MiniMax-M2.5
-          ANTHROPIC_DEFAULT_SONNET_MODEL: MiniMax-M2.5
-          ANTHROPIC_DEFAULT_OPUS_MODEL: MiniMax-M2.5
-          ANTHROPIC_DEFAULT_HAIKU_MODEL: MiniMax-M2.5
