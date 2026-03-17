@@ -13,10 +13,10 @@ on:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@minimax')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@minimax')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@minimax')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@minimax') || contains(github.event.issue.title, '@minimax')))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -37,11 +37,11 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           settings: "claude/settings.json"
 
-          # Optional: Customize the trigger phrase (default: @minimax)
-          trigger_phrase: "@minimax"
+          # Optional: Customize the trigger phrase (default: @claude)
+          # trigger_phrase: "@minimax"
 
           # Optional: Trigger when specific user is assigned to an issue
-          assignee_trigger: "minimax-bot"
+          # assignee_trigger: "minimax-bot"
 
           # Optional: Configure Claude's behavior with CLI arguments
           # claude_args: |
