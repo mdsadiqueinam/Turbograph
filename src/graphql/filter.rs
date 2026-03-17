@@ -19,6 +19,7 @@ pub fn supports_range(column_type: &Type) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::table::supports_range;
     use tokio_postgres::types::Type;
 
     #[test]
