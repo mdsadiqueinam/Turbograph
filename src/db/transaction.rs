@@ -16,10 +16,7 @@ pub async fn execute_query(
     query: &str,
     params: &[&(dyn ToSql + Sync)],
 ) -> Result<u64, DbError> {
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| DbError::Pool(e.to_string()))?;
+    let client = pool.get().await.map_err(|e| DbError::Pool(e.to_string()))?;
 
     let begin = build_begin_statement(tx_config);
     client
@@ -35,50 +32,6 @@ pub async fn execute_query(
         .execute(query, params)
         .await
         .map_err(|e| DbError::Query(e.to_string()));
-
-    match &result {
-        Ok(_) => {
-            client
-                .batch_execute("COMMIT")
-                .await
-                .map_err(|e| DbError::Transaction(format!("COMMIT error: {e}")))?;
-        }
-        Err(_) => {
-            let _ = client.batch_execute("ROLLBACK").await;
-        }
-    }
-
-    result
-}
-
-/// Acquires a pooled connection, wraps the callback in `BEGIN` / `COMMIT`, and
-/// rolls back automatically on error. Works with or without a
-/// [`TransactionConfig`].
-pub(crate) async fn with_transaction<T>(
-    pool: &Pool,
-    tx_config: Option<TransactionConfig>,
-    callback: impl for<'c> FnOnce(
-        &'c tokio_postgres::Client,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<T, DbError>> + Send + 'c>,
-    >,
-) -> Result<T, DbError> {
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| DbError::Pool(e.to_string()))?;
-
-    let begin = build_begin_statement(&tx_config);
-    client
-        .batch_execute(&begin)
-        .await
-        .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
-
-    if let Some(ref cfg) = tx_config {
-        apply_settings(&*client, cfg).await?;
-    }
-
-    let result = callback(&*client).await;
 
     match &result {
         Ok(_) => {
