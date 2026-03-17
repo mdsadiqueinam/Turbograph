@@ -82,7 +82,6 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
-          settings: "claude/settings.json"
           prompt: |
             /fix-ci 
             Failed CI Run: ${{ fromJSON(steps.failure_details.outputs.result).runUrl }}
