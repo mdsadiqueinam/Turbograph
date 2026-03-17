@@ -9,7 +9,7 @@ use crate::db::where_clause::WhereBuilder;
 use crate::models::table::Column;
 use crate::utils::inflection::to_screaming_snake_case;
 
-use super::super::filter::{FilterOp, supports_range};
+use super::super::filter::supports_range;
 use super::super::type_mapping::to_sql_scalar;
 
 use crate::error::gql_err;
@@ -56,11 +56,11 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
 
         if let GqlValue::Object(op_obj) = gql_val {
             for (op_key, op_val) in op_obj {
-                let Some(filter_op) = FilterOp::from_key(op_key.as_str()) else {
+                let Some(filter_op) = Op::from_key(op_key.as_str()) else {
                     continue;
                 };
 
-                if filter_op == FilterOp::In {
+                if filter_op == Op::In {
                     if let GqlValue::List(values) = op_val {
                         if values.len() > 10_000 {
                             return Err(gql_err("IN filter exceeds maximum of 10,000 items"));
@@ -78,15 +78,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
                     continue;
                 }
 
-                let op = match filter_op {
-                    FilterOp::Eq => Op::Eq,
-                    FilterOp::NotEqual => Op::NotEqual,
-                    FilterOp::Gt => Op::Gt,
-                    FilterOp::Gte => Op::Gte,
-                    FilterOp::Lt => Op::Lt,
-                    FilterOp::Lte => Op::Lte,
-                    FilterOp::In => continue,
-                };
+                let op = filter_op;
 
                 if let Some(scalar) = to_sql_scalar(col, &op_val) {
                     builder.where_clause(&quoted, op, Some(scalar));
