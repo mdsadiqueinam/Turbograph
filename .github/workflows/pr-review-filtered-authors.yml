@@ -25,7 +25,6 @@ jobs:
       - name: Review PR from Specific Author
         uses: anthropics/claude-code-action@v1
         with:
-          settings: "claude/settings.json"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
             REPO: ${{ github.repository }}

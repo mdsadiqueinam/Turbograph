@@ -21,7 +21,6 @@ jobs:
       - name: Run Claude Code for Issue Triage
         uses: anthropics/claude-code-action@v1
         with:
-          settings: "claude/settings.json"
           # NOTE: /label-issue requires .claude/commands/label-issue.md and scripts/edit-issue-labels.sh in your repo (see this repo for examples)
           prompt: "/label-issue REPO: ${{ github.repository }} ISSUE_NUMBER: ${{ github.event.issue.number }}"
 
