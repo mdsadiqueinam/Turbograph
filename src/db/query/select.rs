@@ -40,7 +40,7 @@ impl OrderDirection {
 
 pub struct Select<O = NoOrder> {
     table: String,
-    params: Vec<Option<SqlScalar>>,
+    params: Vec<SqlScalar>,
     where_clause: String,
     pool: Pool,
     limit: Option<SqlScalar>,
@@ -55,8 +55,8 @@ impl<O> QueryBase for Select<O> {
     fn table(&self) -> &str { &self.table }
     fn get_where_clause(&self) -> &str { &self.where_clause }
     fn get_where_clause_mut(&mut self) -> &mut String { &mut self.where_clause }
-    fn params(&self) -> &[Option<SqlScalar>] { &self.params }
-    fn params_mut(&mut self) -> &mut Vec<Option<SqlScalar>> { &mut self.params }
+    fn params(&self) -> &[SqlScalar] { &self.params }
+    fn params_mut(&mut self) -> &mut Vec<SqlScalar> { &mut self.params }
     fn pool(&self) -> &Pool { &self.pool }
 }
 

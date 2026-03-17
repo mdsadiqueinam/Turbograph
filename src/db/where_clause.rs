@@ -19,7 +19,7 @@ pub trait WhereBuilder {
 pub(super) trait WhereInternal {
     fn get_query(&self) -> &str;
     fn push_to_query(&mut self, query: String);
-    fn push_param(&mut self, scalar: Option<SqlScalar>) -> usize;
+    fn push_param(&mut self, scalar: SqlScalar) -> usize;
 
     fn has_where(&self) -> bool {
         !self.get_query().is_empty()
@@ -46,13 +46,9 @@ pub(super) trait WhereInternal {
 
 impl<T: WhereInternal> WhereBuilder for T {
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
-        let operator_str = scalar
-            .is_some()
-            .then_some(op.sql_operator())
-            .unwrap_or("IS");
-
-        if scalar.is_some() {
+        if let Some(scalar) = scalar {
             let param_num = self.push_param(scalar);
+            let operator_str = op.sql_operator();
             self.push_query_with_logical_sep(format!(" {column} {operator_str} ${param_num}"));
         } else {
             // NULL check - no parameter needed
@@ -69,14 +65,7 @@ impl<T: WhereInternal> WhereBuilder for T {
     }
 
     fn where_in(&mut self, column: &str, scalars: Vec<SqlScalar>) -> &mut Self {
-        if scalars.is_empty() {
-            return self;
-        }
-        // Use = ANY($1) for proper parameterization
-        let param_num = self.push_param(Some(SqlScalar::Array(scalars)));
-        let fragment = format!(" {column} = ANY(${param_num})");
-        self.push_query_with_logical_sep(fragment);
-        self
+        unimplemented!("WHERE IN is not yet implemented");
     }
 
     fn where_block<F>(&mut self, block: F) -> &mut Self

@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
-use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
+use tokio_postgres::types::ToSql;
 
 use crate::db::scalar::SqlScalar;
 use crate::db::transaction::execute_query;
@@ -18,7 +17,7 @@ use super::QueryBase;
 
 pub struct Insert {
     table: String,
-    params: Vec<Option<SqlScalar>>,
+    params: Vec<SqlScalar>,
     pool: Pool,
     values: Vec<HashMap<String, Option<SqlScalar>>>,
     returning: bool,
@@ -27,17 +26,27 @@ pub struct Insert {
 // ── QueryBase (no SupportsWhere) ──────────────────────────────────────────────
 
 impl QueryBase for Insert {
-    fn table(&self) -> &str { &self.table }
-    fn get_where_clause(&self) -> &str { "" }
+    fn table(&self) -> &str {
+        &self.table
+    }
+    fn get_where_clause(&self) -> &str {
+        ""
+    }
     fn get_where_clause_mut(&mut self) -> &mut String {
         // Insert never uses a where clause; this should never be called.
         // Since SupportsWhere is NOT implemented, WhereBuilder methods
         // are never available and this is never called.
         unreachable!("Insert does not support WHERE clauses")
     }
-    fn params(&self) -> &[Option<SqlScalar>] { &self.params }
-    fn params_mut(&mut self) -> &mut Vec<Option<SqlScalar>> { &mut self.params }
-    fn pool(&self) -> &Pool { &self.pool }
+    fn params(&self) -> &[SqlScalar] {
+        &self.params
+    }
+    fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
+        &mut self.params
+    }
+    fn pool(&self) -> &Pool {
+        &self.pool
+    }
 }
 
 // ── Constructor & methods ─────────────────────────────────────────────────────
@@ -123,10 +132,7 @@ impl Insert {
         q
     }
 
-    pub async fn execute(
-        &self,
-        tx_config: Option<TransactionConfig>,
-    ) -> Result<u64, DbError> {
+    pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();
         execute_query(&self.pool, &tx_config, &query, &params).await
@@ -137,7 +143,8 @@ impl Insert {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let client = self.pool
+        let client = self
+            .pool
             .get()
             .await
             .map_err(|e| DbError::Pool(e.to_string()))?;
@@ -158,6 +165,8 @@ impl Insert {
 
 #[cfg(test)]
 mod tests {
+    use crate::db::pool::PoolExt;
+
     use super::*;
 
     fn test_pool() -> Pool {

@@ -15,8 +15,8 @@ pub(super) trait QueryBase {
     fn table(&self) -> &str;
     fn get_where_clause(&self) -> &str;
     fn get_where_clause_mut(&mut self) -> &mut String;
-    fn params(&self) -> &[Option<SqlScalar>];
-    fn params_mut(&mut self) -> &mut Vec<Option<SqlScalar>>;
+    fn params(&self) -> &[SqlScalar];
+    fn params_mut(&mut self) -> &mut Vec<SqlScalar>;
     fn pool(&self) -> &Pool;
 }
 
@@ -33,7 +33,7 @@ impl<T: SupportsWhere> WhereInternal for T {
     fn push_to_query(&mut self, q: String) {
         self.get_where_clause_mut().push_str(&q);
     }
-    fn push_param(&mut self, scalar: Option<SqlScalar>) -> usize {
+    fn push_param(&mut self, scalar: SqlScalar) -> usize {
         self.params_mut().push(scalar);
         self.params().len()
     }
