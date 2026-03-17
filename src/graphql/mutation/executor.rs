@@ -10,7 +10,6 @@ use crate::db::query::delete::Delete;
 use crate::db::query::insert::Insert;
 use crate::db::query::update::Update;
 use crate::db::{JsonExt, JsonListExt};
-use crate::db::transaction::with_transaction;
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
@@ -51,21 +50,18 @@ pub(super) async fn execute_create(
     }
 
     insert.values(row);
-    let sql = insert.get_query();
 
-    with_transaction(pool, tx_config, |client| {
-        Box::pin(async move {
-            let params = insert.all_params();
-            let row = client
-                .query_one(&sql, &params)
-                .await
-                .map_err(|e| DbError::Query(format!("INSERT error: {e}")))?;
+    let rows = insert
+        .execute_with_returning(tx_config)
+        .await
+        .map_err(db_err_to_gql)?;
 
-            Ok(Some(FieldValue::owned_any(row.to_json())))
-        })
-    })
-    .await
-    .map_err(db_err_to_gql)
+    let row = rows
+        .into_iter()
+        .next()
+        .map(|r| FieldValue::owned_any(r.to_json()));
+
+    Ok(row)
 }
 
 /// UPDATE … SET … WHERE … RETURNING *  →  list of updated entities.
@@ -107,27 +103,18 @@ pub(super) async fn execute_update(
         apply_gql_conditions(&mut update, pairs, columns)?;
     }
 
-    let sql = update.get_query();
+    let rows = update
+        .execute_with_returning(tx_config)
+        .await
+        .map_err(db_err_to_gql)?;
 
-    with_transaction(pool, tx_config, |client| {
-        Box::pin(async move {
-            let params = update.all_params();
-            let rows = client
-                .query(&sql, &params)
-                .await
-                .map_err(|e| DbError::Query(format!("UPDATE error: {e}")))?;
+    let list: Vec<FieldValue> = rows
+        .to_json_list()
+        .into_iter()
+        .map(FieldValue::owned_any)
+        .collect();
 
-            let list: Vec<FieldValue> = rows
-                .to_json_list()
-                .into_iter()
-                .map(FieldValue::owned_any)
-                .collect();
-
-            Ok(Some(FieldValue::list(list)))
-        })
-    })
-    .await
-    .map_err(db_err_to_gql)
+    Ok(Some(FieldValue::list(list)))
 }
 
 /// DELETE … WHERE … RETURNING *  →  list of deleted entities.
@@ -147,25 +134,16 @@ pub(super) async fn execute_delete(
         apply_gql_conditions(&mut delete, pairs, columns)?;
     }
 
-    let sql = delete.get_query();
+    let rows = delete
+        .execute_with_returning(tx_config)
+        .await
+        .map_err(db_err_to_gql)?;
 
-    with_transaction(pool, tx_config, |client| {
-        Box::pin(async move {
-            let params = delete.where_params();
-            let rows = client
-                .query(&sql, &params)
-                .await
-                .map_err(|e| DbError::Query(format!("DELETE error: {e}")))?;
+    let list: Vec<FieldValue> = rows
+        .to_json_list()
+        .into_iter()
+        .map(FieldValue::owned_any)
+        .collect();
 
-            let list: Vec<FieldValue> = rows
-                .to_json_list()
-                .into_iter()
-                .map(FieldValue::owned_any)
-                .collect();
-
-            Ok(Some(FieldValue::list(list)))
-        })
-    })
-    .await
-    .map_err(db_err_to_gql)
+    Ok(Some(FieldValue::list(list)))
 }

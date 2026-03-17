@@ -2,6 +2,7 @@ use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Row;
 
 use crate::db::scalar::SqlScalar;
 use crate::db::transaction::execute_query;
@@ -78,6 +79,27 @@ impl Delete {
         let query = self.get_query();
         let params = self.where_params();
         execute_query(&self.pool, &tx_config, &query, &params).await
+    }
+
+    /// Execute the query and return rows (for queries with RETURNING *).
+    pub async fn execute_with_returning(
+        &self,
+        tx_config: Option<TransactionConfig>,
+    ) -> Result<Vec<Row>, DbError> {
+        let client = self.pool
+            .get()
+            .await
+            .map_err(|e| DbError::Pool(e.to_string()))?;
+
+        let query = self.get_query();
+        let params = self.where_params();
+
+        let rows = client
+            .query(&query, &params)
+            .await
+            .map_err(|e| DbError::Query(format!("DELETE error: {e}")))?;
+
+        Ok(rows)
     }
 }
 
