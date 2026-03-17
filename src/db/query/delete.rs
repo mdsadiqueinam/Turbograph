@@ -1,7 +1,9 @@
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Row;
 
 use crate::db::scalar::SqlScalar;
 use crate::db::transaction::execute_query;
@@ -15,6 +17,7 @@ pub struct Delete {
     params: Vec<Option<SqlScalar>>,
     where_clause: String,
     pool: Pool,
+    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -39,10 +42,17 @@ impl Delete {
             params: Vec::new(),
             where_clause: String::new(),
             pool,
+            returning: false,
         }
     }
 
-    fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    /// Append `RETURNING *` to the generated SQL.
+    pub fn returning_all(&mut self) -> &mut Self {
+        self.returning = true;
+        self
+    }
+
+    pub fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
             .map(|p| p as &(dyn ToSql + Sync))
@@ -50,11 +60,17 @@ impl Delete {
     }
 
     pub fn get_query(&self) -> String {
-        if self.where_clause.is_empty() {
+        let mut q = if self.where_clause.is_empty() {
             format!("DELETE FROM {}", self.table)
         } else {
             format!("DELETE FROM {}{}", self.table, self.where_clause)
+        };
+
+        if self.returning {
+            q.push_str(" RETURNING *");
         }
+
+        q
     }
 
     pub async fn execute(
@@ -64,6 +80,27 @@ impl Delete {
         let query = self.get_query();
         let params = self.where_params();
         execute_query(&self.pool, &tx_config, &query, &params).await
+    }
+
+    /// Execute the query and return rows (for queries with RETURNING *).
+    pub async fn execute_with_returning(
+        &self,
+        tx_config: Option<TransactionConfig>,
+    ) -> Result<Vec<Row>, DbError> {
+        let client = self.pool
+            .get()
+            .await
+            .map_err(|e| DbError::Pool(e.to_string()))?;
+
+        let query = self.get_query();
+        let params = self.where_params();
+
+        let rows = client
+            .query(&query, &params)
+            .await
+            .map_err(|e| DbError::Query(format!("DELETE error: {e}")))?;
+
+        Ok(rows)
     }
 }
 
@@ -89,13 +126,15 @@ mod tests {
 
     #[test]
     fn test_delete_simple() {
-        let q = Delete::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.delete("users");
         assert_eq!(q.get_query(), "DELETE FROM users");
     }
 
     #[test]
     fn test_delete_with_where() {
-        let mut q = Delete::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.delete("users");
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
         let sql = q.get_query();
         assert!(sql.starts_with("DELETE FROM users"));
@@ -105,7 +144,8 @@ mod tests {
 
     #[test]
     fn test_delete_with_complex_where() {
-        let mut q = Delete::new("sessions", test_pool());
+        let pool = test_pool();
+        let mut q = pool.delete("sessions");
         q.where_block(|q| {
             q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
             q.or_where_clause("id", Op::Eq, Some(SqlScalar::Int4(2)));
@@ -122,7 +162,8 @@ mod tests {
 
     #[test]
     fn test_delete_schema_qualified() {
-        let q = Delete::new("public.logs", test_pool());
+        let pool = test_pool();
+        let q = pool.delete("public.logs");
         assert!(q.get_query().contains("public.logs"));
     }
 }

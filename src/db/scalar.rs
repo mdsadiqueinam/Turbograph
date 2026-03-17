@@ -20,6 +20,8 @@ pub(crate) enum SqlScalar {
     Time(NaiveTime),
     Timestamp(NaiveDateTime),
     Timestamptz(DateTime<Utc>),
+    /// Array of scalars for use with `= ANY($1)` queries
+    Array(Vec<SqlScalar>),
 }
 
 impl ToSql for SqlScalar {
@@ -42,11 +44,17 @@ impl ToSql for SqlScalar {
             SqlScalar::Time(v) => v.to_sql(ty, out),
             SqlScalar::Timestamp(v) => v.to_sql(ty, out),
             SqlScalar::Timestamptz(v) => v.to_sql(ty, out),
+            SqlScalar::Array(arr) => {
+                // Convert Vec<SqlScalar> to Vec<&dyn ToSql> for array serialization
+                let refs: Vec<&dyn ToSql> = arr.iter().collect();
+                refs.to_sql(ty, out)
+            }
         }
     }
 
     fn accepts(ty: &Type) -> bool {
-        matches!(
+        // Check scalar types
+        if matches!(
             *ty,
             Type::BOOL
                 | Type::INT2
@@ -64,7 +72,16 @@ impl ToSql for SqlScalar {
                 | Type::TIME
                 | Type::TIMESTAMP
                 | Type::TIMESTAMPTZ
-        )
+        ) {
+            return true;
+        }
+        // Check array types - accept if the element type is supported
+        if let Type::Array(elem_ty) = ty {
+            if let Some(elem) = elem_ty.component_type() {
+                return SqlScalar::Bool(false).accepts(&elem);
+            }
+        }
+        false
     }
 
     tokio_postgres::types::to_sql_checked!();

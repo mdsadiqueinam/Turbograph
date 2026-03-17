@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
+use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
+use tokio_postgres::Row;
 
 use crate::db::scalar::SqlScalar;
 use crate::db::transaction::execute_query;
@@ -19,6 +21,7 @@ pub struct Update {
     where_clause: String,
     pool: Pool,
     values: HashMap<String, Option<SqlScalar>>,
+    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -44,7 +47,14 @@ impl Update {
             where_clause: String::new(),
             pool,
             values: HashMap::new(),
+            returning: false,
         }
+    }
+
+    /// Append `RETURNING *` to the generated SQL.
+    pub fn returning_all(&mut self) -> &mut Self {
+        self.returning = true;
+        self
     }
 
     /// Set a column to a value. These become the `SET col=$N` assignments.
@@ -53,7 +63,7 @@ impl Update {
         self
     }
 
-    fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
+    pub fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         // SET params come first, then WHERE params
         let mut params: Vec<&(dyn ToSql + Sync)> = self
             .values
@@ -92,6 +102,10 @@ impl Update {
             q.push_str(&shifted_where);
         }
 
+        if self.returning {
+            q.push_str(" RETURNING *");
+        }
+
         q
     }
 
@@ -102,6 +116,27 @@ impl Update {
         let query = self.get_query();
         let params = self.all_params();
         execute_query(&self.pool, &tx_config, &query, &params).await
+    }
+
+    /// Execute the query and return rows (for queries with RETURNING *).
+    pub async fn execute_with_returning(
+        &self,
+        tx_config: Option<TransactionConfig>,
+    ) -> Result<Vec<Row>, DbError> {
+        let client = self.pool
+            .get()
+            .await
+            .map_err(|e| DbError::Pool(e.to_string()))?;
+
+        let query = self.get_query();
+        let params = self.all_params();
+
+        let rows = client
+            .query(&query, &params)
+            .await
+            .map_err(|e| DbError::Query(format!("UPDATE error: {e}")))?;
+
+        Ok(rows)
     }
 }
 
@@ -158,13 +193,15 @@ mod tests {
 
     #[test]
     fn test_update_simple() {
-        let q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let q = pool.update("users");
         assert_eq!(q.get_query(), "UPDATE users");
     }
 
     #[test]
     fn test_update_with_set() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         let sql = q.get_query();
         assert!(sql.starts_with("UPDATE users SET"));
@@ -173,7 +210,8 @@ mod tests {
 
     #[test]
     fn test_update_with_set_and_where() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(5)));
         let sql = q.get_query();
@@ -187,7 +225,8 @@ mod tests {
 
     #[test]
     fn test_update_with_multiple_set() {
-        let mut q = Update::new("users", test_pool());
+        let pool = test_pool();
+        let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Bob".into())));
         q.set("age", Some(SqlScalar::Int4(30)));
         let sql = q.get_query();

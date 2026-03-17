@@ -5,6 +5,7 @@ use super::scalar::SqlScalar;
 pub trait WhereBuilder {
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
+    fn where_in(&mut self, column: &str, scalars: Vec<SqlScalar>) -> &mut Self;
     fn where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);
@@ -59,6 +60,17 @@ impl<T: WhereInternal> WhereBuilder for T {
             self.push_to_query(" OR ".to_string());
         }
         self.where_clause(column, op, scalar)
+    }
+
+    fn where_in(&mut self, column: &str, scalars: Vec<SqlScalar>) -> &mut Self {
+        if scalars.is_empty() {
+            return self;
+        }
+        // Use = ANY($1) for proper parameterization
+        let param_num = self.push_param(Some(SqlScalar::Array(scalars)));
+        let fragment = format!(" {column} = ANY(${param_num})");
+        self.push_query_with_logical_sep(fragment);
+        self
     }
 
     fn where_block<F>(&mut self, block: F) -> &mut Self
