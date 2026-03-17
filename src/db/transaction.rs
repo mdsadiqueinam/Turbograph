@@ -48,6 +48,46 @@ pub async fn execute_query(
     result
 }
 
+/// Executes a query (INSERT, UPDATE, DELETE with RETURNING) within a transaction.
+/// Returns the rows from the RETURNING clause.
+pub async fn execute_query_with_returning(
+    pool: &Pool,
+    tx_config: &Option<TransactionConfig>,
+    query: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Vec<tokio_postgres::Row>, DbError> {
+    let client = pool.get().await.map_err(|e| DbError::Pool(e.to_string()))?;
+
+    let begin = build_begin_statement(tx_config);
+    client
+        .batch_execute(&begin)
+        .await
+        .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
+
+    if let Some(cfg) = tx_config.as_ref() {
+        apply_settings(&*client, cfg).await?;
+    }
+
+    let result = client
+        .query(query, params)
+        .await
+        .map_err(|e| DbError::Query(e.to_string()));
+
+    match &result {
+        Ok(_) => {
+            client
+                .batch_execute("COMMIT")
+                .await
+                .map_err(|e| DbError::Transaction(format!("COMMIT error: {e}")))?;
+        }
+        Err(_) => {
+            let _ = client.batch_execute("ROLLBACK").await;
+        }
+    }
+
+    result
+}
+
 pub(super) fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> String {
     let mut begin = String::from("BEGIN");
     if let Some(cfg) = tx_config {

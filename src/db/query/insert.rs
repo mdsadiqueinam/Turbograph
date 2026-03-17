@@ -8,7 +8,7 @@ use tokio_postgres::Row;
 use tokio_postgres::types::ToSql;
 
 use crate::db::scalar::SqlScalar;
-use crate::db::transaction::execute_query;
+use crate::db::transaction::{execute_query, execute_query_with_returning};
 
 use super::QueryBase;
 
@@ -143,21 +143,9 @@ impl Insert {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let client = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| DbError::Pool(e.to_string()))?;
-
         let query = self.get_query();
         let params = self.all_params();
-
-        let rows = client
-            .query(&query, &params)
-            .await
-            .map_err(|e| DbError::Query(format!("INSERT error: {e}")))?;
-
-        Ok(rows)
+        execute_query_with_returning(&self.pool, &tx_config, &query, &params).await
     }
 }
 
