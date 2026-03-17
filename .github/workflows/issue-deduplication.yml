@@ -22,7 +22,7 @@ jobs:
       - name: Check for duplicate issues
         uses: anthropics/claude-code-action@v1
         with:
-          settings: ".github/claude/settings.json"
+          settings: "claude/settings.json"
           prompt: |
             Analyze this new issue and check if it's a duplicate of existing issues in the repository.
 
