@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use super::operator::Op;
 use super::scalar::SqlScalar;
 
@@ -68,15 +66,9 @@ impl<T: WhereInternal> WhereBuilder for T {
         if scalars.is_empty() {
             return self;
         }
-        let mut fragment = format!(" {column} IN (");
-        for (i, scalar) in scalars.into_iter().enumerate() {
-            if i > 0 {
-                fragment.push_str(", ");
-            }
-            let param_num = self.push_param(Some(scalar));
-            write!(fragment, "${param_num}").unwrap();
-        }
-        fragment.push(')');
+        // Use = ANY($1) for proper parameterization
+        let param_num = self.push_param(Some(SqlScalar::Array(scalars)));
+        let fragment = format!(" {column} = ANY(${param_num})");
         self.push_query_with_logical_sep(fragment);
         self
     }
