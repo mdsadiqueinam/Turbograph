@@ -1,5 +1,3 @@
-use tokio_postgres::types::Type;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterOp {
     Eq,
@@ -42,25 +40,10 @@ impl FilterOp {
     }
 }
 
-pub fn supports_range(column_type: &Type) -> bool {
-    matches!(
-        *column_type,
-        Type::INT2
-            | Type::INT4
-            | Type::INT8
-            | Type::FLOAT4
-            | Type::FLOAT8
-            | Type::NUMERIC
-            | Type::DATE
-            | Type::TIME
-            | Type::TIMESTAMP
-            | Type::TIMESTAMPTZ
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::table::supports_range;
     use tokio_postgres::types::Type;
 
     // #[test]

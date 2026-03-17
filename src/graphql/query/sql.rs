@@ -7,7 +7,8 @@ use async_graphql::Value as GqlValue;
 use crate::models::table::Column;
 use crate::utils::inflection::to_screaming_snake_case;
 
-use super::super::filter::{FilterOp, supports_range};
+use super::super::filter::FilterOp;
+use crate::models::table::supports_range;
 use super::super::sql_scalar::SqlScalar;
 use super::super::type_mapping::to_sql_scalar;
 
