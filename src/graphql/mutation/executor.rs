@@ -6,6 +6,7 @@ use async_graphql::dynamic::FieldValue;
 use deadpool_postgres::Pool;
 
 use crate::db::error::DbError;
+use crate::db::pool::PoolExt;
 use crate::db::query::delete::Delete;
 use crate::db::query::insert::Insert;
 use crate::db::query::update::Update;
@@ -31,7 +32,7 @@ pub(super) async fn execute_create(
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut insert = Insert::new(&table_ref, pool.clone());
+    let mut insert = pool.insert(&table_ref);
     insert.returning_all();
 
     let mut row = HashMap::new();
@@ -76,7 +77,7 @@ pub(super) async fn execute_update(
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut update = Update::new(&table_ref, pool.clone());
+    let mut update = pool.update(&table_ref);
     update.returning_all();
 
     let mut has_set = false;
@@ -127,7 +128,7 @@ pub(super) async fn execute_delete(
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut delete = Delete::new(&table_ref, pool.clone());
+    let mut delete = pool.delete(&table_ref);
     delete.returning_all();
 
     if let Some(pairs) = condition {

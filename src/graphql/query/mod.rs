@@ -5,6 +5,7 @@ use async_graphql::dynamic::{Field, FieldFuture, InputValue, TypeRef};
 use deadpool_postgres::Pool;
 
 use crate::db::error::DbError;
+use crate::db::pool::PoolExt;
 use crate::db::query::select::{OrderDirection, Select};
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
@@ -71,7 +72,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
 
             FieldFuture::new(async move {
                 let table_ref = sql::quote_table(&tbl_schema, &tbl_name);
-                let mut select = Select::new(&table_ref, (*pool).clone());
+                let mut select = pool.select(&table_ref);
 
                 if let Some(pairs) = condition_pairs {
                     sql::apply_gql_conditions(&mut select, pairs, &columns)?;
