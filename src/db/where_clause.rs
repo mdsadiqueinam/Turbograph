@@ -50,8 +50,14 @@ impl<T: WhereInternal> WhereBuilder for T {
             .is_some()
             .then_some(op.sql_operator())
             .unwrap_or("IS");
-        let param_num = self.push_param(scalar);
-        self.push_query_with_logical_sep(format!(" {column} {operator_str} ${param_num}"));
+
+        if scalar.is_some() {
+            let param_num = self.push_param(scalar);
+            self.push_query_with_logical_sep(format!(" {column} {operator_str} ${param_num}"));
+        } else {
+            // NULL check - no parameter needed
+            self.push_query_with_logical_sep(format!(" {column} IS NULL"));
+        }
         self
     }
 
