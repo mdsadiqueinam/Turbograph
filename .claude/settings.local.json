@@ -1,5 +1,11 @@
 {
-    "sandbox": {
-        "enabled": true
-    }
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)"
+    ]
+  }
 }

@@ -114,8 +114,8 @@ async fn e2e_rls_allows_updating_current_user() {
         &format!(
             r#"mutation {{
                 updateUser(
-                    patch: {{ bio: \"{}\" }}
-                    condition: {{ username: {{ equal: \"alice\" }} }}
+                    patch: {{ bio: "{}" }}
+                    condition: {{ username: {{ equal: "alice" }} }}
                 ) {{ id username bio }}
             }}"#,
             temp_bio
@@ -136,8 +136,8 @@ async fn e2e_rls_allows_updating_current_user() {
         &format!(
             r#"mutation {{
                 updateUser(
-                    patch: {{ bio: \"{}\" }}
-                    condition: {{ username: {{ equal: \"alice\" }} }}
+                    patch: {{ bio: "{}" }}
+                    condition: {{ username: {{ equal: "alice" }} }}
                 ) {{ id bio }}
             }}"#,
             original_bio
