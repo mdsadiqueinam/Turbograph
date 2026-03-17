@@ -2,6 +2,51 @@ use bytes::BytesMut;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use tokio_postgres::types::{IsNull, ToSql, Type};
 
+/// Typed SQL array parameter wrapper.
+#[derive(Debug, Clone)]
+pub enum SqlArray {
+    Bool(Vec<bool>),
+    Int2(Vec<i16>),
+    Int4(Vec<i32>),
+    Int8(Vec<i64>),
+    Float4(Vec<f32>),
+    Float8(Vec<f64>),
+    Text(Vec<String>),
+}
+
+impl ToSql for SqlArray {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        match self {
+            SqlArray::Bool(v) => v.to_sql(ty, out),
+            SqlArray::Int2(v) => v.to_sql(ty, out),
+            SqlArray::Int4(v) => v.to_sql(ty, out),
+            SqlArray::Int8(v) => v.to_sql(ty, out),
+            SqlArray::Float4(v) => v.to_sql(ty, out),
+            SqlArray::Float8(v) => v.to_sql(ty, out),
+            SqlArray::Text(v) => v.to_sql(ty, out),
+        }
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        matches!(
+            *ty,
+            Type::BOOL_ARRAY
+                | Type::INT2_ARRAY
+                | Type::INT4_ARRAY
+                | Type::INT8_ARRAY
+                | Type::FLOAT4_ARRAY
+                | Type::FLOAT8_ARRAY
+                | Type::TEXT_ARRAY
+        )
+    }
+
+    tokio_postgres::types::to_sql_checked!();
+}
+
 /// Typed SQL parameter wrapper.
 /// Lets callers build a `Vec<SqlScalar>` and borrow as
 /// `&[&(dyn ToSql + Sync)]` for `tokio_postgres::Client::query`.
@@ -20,6 +65,7 @@ pub(crate) enum SqlScalar {
     Time(NaiveTime),
     Timestamp(NaiveDateTime),
     Timestamptz(DateTime<Utc>),
+    Array(SqlArray),
 }
 
 impl ToSql for SqlScalar {
@@ -42,6 +88,7 @@ impl ToSql for SqlScalar {
             SqlScalar::Time(v) => v.to_sql(ty, out),
             SqlScalar::Timestamp(v) => v.to_sql(ty, out),
             SqlScalar::Timestamptz(v) => v.to_sql(ty, out),
+            SqlScalar::Array(v) => v.to_sql(ty, out),
         }
     }
 
@@ -65,7 +112,7 @@ impl ToSql for SqlScalar {
                 | Type::TIME
                 | Type::TIMESTAMP
                 | Type::TIMESTAMPTZ
-        )
+        ) || SqlArray::accepts(ty)
     }
 
     tokio_postgres::types::to_sql_checked!();
