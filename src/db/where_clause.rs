@@ -1,11 +1,11 @@
 use super::operator::Op;
-use super::scalar::SqlScalar;
+use super::scalar::{SqlArray, SqlScalar};
 
 /// The Public API
 pub trait WhereBuilder {
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
-    fn where_in(&mut self, column: &str, scalars: Vec<SqlScalar>) -> &mut Self;
+    fn where_in(&mut self, column: &str, scalars: SqlArray) -> &mut Self;
     fn where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);
@@ -64,8 +64,10 @@ impl<T: WhereInternal> WhereBuilder for T {
         self.where_clause(column, op, scalar)
     }
 
-    fn where_in(&mut self, column: &str, scalars: Vec<SqlScalar>) -> &mut Self {
-        unimplemented!("WHERE IN is not yet implemented");
+    fn where_in(&mut self, column: &str, scalars: SqlArray) -> &mut Self {
+        let param_num = self.push_param(SqlScalar::Array(scalars));
+        self.push_query_with_logical_sep(format!(" {column} = ANY(${param_num})"));
+        self
     }
 
     fn where_block<F>(&mut self, block: F) -> &mut Self

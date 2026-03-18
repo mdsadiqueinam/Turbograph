@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
-use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
 use crate::db::error::DbError;
 use deadpool_postgres::Pool;
-use tokio_postgres::types::ToSql;
 use tokio_postgres::Row;
+use tokio_postgres::types::ToSql;
 
 use crate::db::scalar::SqlScalar;
-use crate::db::transaction::execute_query;
+use crate::db::transaction::{execute_query, execute_query_with_returning};
 
 use super::{QueryBase, SupportsWhere};
 
@@ -27,12 +26,24 @@ pub struct Update {
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
 
 impl QueryBase for Update {
-    fn table(&self) -> &str { &self.table }
-    fn get_where_clause(&self) -> &str { &self.where_clause }
-    fn get_where_clause_mut(&mut self) -> &mut String { &mut self.where_clause }
-    fn params(&self) -> &[SqlScalar] { &self.params }
-    fn params_mut(&mut self) -> &mut Vec<SqlScalar> { &mut self.params }
-    fn pool(&self) -> &Pool { &self.pool }
+    fn table(&self) -> &str {
+        &self.table
+    }
+    fn get_where_clause(&self) -> &str {
+        &self.where_clause
+    }
+    fn get_where_clause_mut(&mut self) -> &mut String {
+        &mut self.where_clause
+    }
+    fn params(&self) -> &[SqlScalar] {
+        &self.params
+    }
+    fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
+        &mut self.params
+    }
+    fn pool(&self) -> &Pool {
+        &self.pool
+    }
 }
 
 impl SupportsWhere for Update {}
@@ -109,10 +120,7 @@ impl Update {
         q
     }
 
-    pub async fn execute(
-        &self,
-        tx_config: Option<TransactionConfig>,
-    ) -> Result<u64, DbError> {
+    pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();
         execute_query(&self.pool, &tx_config, &query, &params).await
@@ -123,20 +131,9 @@ impl Update {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let client = self.pool
-            .get()
-            .await
-            .map_err(|e| DbError::Pool(e.to_string()))?;
-
         let query = self.get_query();
         let params = self.all_params();
-
-        let rows = client
-            .query(&query, &params)
-            .await
-            .map_err(|e| DbError::Query(format!("UPDATE error: {e}")))?;
-
-        Ok(rows)
+        execute_query_with_returning(&self.pool, &tx_config, &query, &params).await
     }
 }
 
@@ -177,6 +174,7 @@ fn shift_param_indices(where_clause: &str, shift: usize) -> String {
 mod tests {
     use super::*;
     use crate::db::operator::Op;
+    use crate::db::pool::PoolExt;
     use crate::db::where_clause::WhereBuilder;
 
     fn test_pool() -> Pool {

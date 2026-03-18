@@ -6,7 +6,7 @@ use deadpool_postgres::Pool;
 
 use crate::db::error::DbError;
 use crate::db::pool::PoolExt;
-use crate::db::query::select::{OrderDirection, Select};
+use crate::db::query::select::OrderDirection;
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
@@ -79,8 +79,8 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
                 }
 
                 let order_pairs = sql::parse_order_by(&order_by, &columns)?;
-                let safe_limit = first.unwrap_or(100).clamp(1, 1000) as i32;
-                let off = offset.unwrap_or(0).max(0) as i32;
+                let safe_limit = first.unwrap_or(100).clamp(1, 1000);
+                let off = offset.unwrap_or(0).max(0);
 
                 let (total_count, json_rows) = if !order_pairs.is_empty() {
                     let first_pair = &order_pairs[0];

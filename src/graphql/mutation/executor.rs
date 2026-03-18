@@ -7,9 +7,6 @@ use deadpool_postgres::Pool;
 
 use crate::db::error::DbError;
 use crate::db::pool::PoolExt;
-use crate::db::query::delete::Delete;
-use crate::db::query::insert::Insert;
-use crate::db::query::update::Update;
 use crate::db::{JsonExt, JsonListExt};
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
@@ -47,7 +44,9 @@ pub(super) async fn execute_create(
     }
 
     if row.is_empty() {
-        return Err(async_graphql::Error::new("No valid columns provided for insert"));
+        return Err(async_graphql::Error::new(
+            "No valid columns provided for insert",
+        ));
     }
 
     insert.values(row);
@@ -97,7 +96,9 @@ pub(super) async fn execute_update(
     }
 
     if !has_set {
-        return Err(async_graphql::Error::new("No valid columns provided for update"));
+        return Err(async_graphql::Error::new(
+            "No valid columns provided for update",
+        ));
     }
 
     if let Some(pairs) = condition {

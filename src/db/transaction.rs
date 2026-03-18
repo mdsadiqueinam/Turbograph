@@ -1,6 +1,4 @@
 use std::fmt::Write;
-use std::future::Future;
-use std::pin::Pin;
 
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
@@ -16,10 +14,7 @@ pub async fn execute_query(
     query: &str,
     params: &[&(dyn ToSql + Sync)],
 ) -> Result<u64, DbError> {
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| DbError::Pool(e.to_string()))?;
+    let client = pool.get().await.map_err(|e| DbError::Pool(e.to_string()))?;
 
     let begin = build_begin_statement(tx_config);
     client
@@ -51,34 +46,30 @@ pub async fn execute_query(
     result
 }
 
-/// Acquires a pooled connection, wraps the callback in `BEGIN` / `COMMIT`, and
-/// rolls back automatically on error. Works with or without a
-/// [`TransactionConfig`].
-pub(crate) async fn with_transaction<T>(
+/// Executes a query (INSERT, UPDATE, DELETE with RETURNING) within a transaction.
+/// Returns the rows from the RETURNING clause.
+pub async fn execute_query_with_returning(
     pool: &Pool,
-    tx_config: Option<TransactionConfig>,
-    callback: impl for<'c> FnOnce(
-        &'c tokio_postgres::Client,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<T, DbError>> + Send + 'c>,
-    >,
-) -> Result<T, DbError> {
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| DbError::Pool(e.to_string()))?;
+    tx_config: &Option<TransactionConfig>,
+    query: &str,
+    params: &[&(dyn ToSql + Sync)],
+) -> Result<Vec<tokio_postgres::Row>, DbError> {
+    let client = pool.get().await.map_err(|e| DbError::Pool(e.to_string()))?;
 
-    let begin = build_begin_statement(&tx_config);
+    let begin = build_begin_statement(tx_config);
     client
         .batch_execute(&begin)
         .await
         .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
-    if let Some(ref cfg) = tx_config {
+    if let Some(cfg) = tx_config.as_ref() {
         apply_settings(&*client, cfg).await?;
     }
 
-    let result = callback(&*client).await;
+    let result = client
+        .query(query, params)
+        .await
+        .map_err(|e| DbError::Query(e.to_string()));
 
     match &result {
         Ok(_) => {

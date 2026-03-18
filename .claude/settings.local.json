@@ -1,5 +1,15 @@
 {
-    "sandbox": {
-        "enabled": true
-    }
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo build:*)",
+      "Bash(curl *)",
+      "Bash(docker compose:*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
+  }
 }
