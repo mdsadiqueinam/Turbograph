@@ -1,6 +1,4 @@
 use std::fmt::Write;
-use std::future::Future;
-use std::pin::Pin;
 
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;

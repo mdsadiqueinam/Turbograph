@@ -50,7 +50,7 @@ impl ToSql for SqlArray {
 /// Typed SQL parameter wrapper.
 /// Lets callers build a `Vec<SqlScalar>` and borrow as
 /// `&[&(dyn ToSql + Sync)]` for `tokio_postgres::Client::query`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum SqlScalar {
     Bool(bool),
     Int2(i16),

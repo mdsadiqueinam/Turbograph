@@ -6,7 +6,7 @@ use deadpool_postgres::Pool;
 
 use crate::db::error::DbError;
 use crate::db::pool::PoolExt;
-use crate::db::query::select::{OrderDirection, Select};
+use crate::db::query::select::OrderDirection;
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
