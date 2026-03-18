@@ -67,3 +67,10 @@ select.execute(tx_config).await
 - **Phase Markers**: `Select<NoOrder>` vs `Select<Ordered>` prevents invalid operations
 - **SqlScalar**: Type-safe SQL parameter wrapper in `src/db/scalar.rs`
 - **PoolExt**: Extension trait on `deadpool_postgres::Pool` adds `.select()`, `.insert()`, etc.
+
+### Database Protocols
+- IF any error relates to database connectivity, schema, syntax, or constraints:
+    1. DO NOT assume existing knowledge.
+    2. IMMEDIATELY perform a web search for the exact error message.
+    3. Analyze top results before proposing a solution.
+- Prioritize using official documentation in search results.
