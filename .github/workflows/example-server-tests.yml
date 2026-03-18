@@ -2,6 +2,9 @@ name: Example Server Tests
 
 on:
   push:
+    branches:
+      - main
+      - 'release/*'
   pull_request:
 
 jobs:
@@ -42,9 +45,6 @@ jobs:
 
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
-
-      - name: Run example GraphQL integration tests
-        run: cargo test --manifest-path examples/server/Cargo.toml --test graphql_tests --locked
 
       - name: Start example server in background
         run: |

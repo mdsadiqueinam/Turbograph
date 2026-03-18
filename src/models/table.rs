@@ -1,8 +1,13 @@
+use async_graphql::dynamic::{
+    Enum, EnumItem, Field, FieldFuture, FieldValue, InputObject, InputValue, Object, TypeRef,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 use tokio_postgres::types::Type;
 
-use crate::utils::inflection::{singularize, to_pascal_case};
+use super::connection::{ConnectionPayload, EdgePayload};
+use crate::graphql::condition_type_ref;
+use crate::utils::inflection::{singularize, to_pascal_case, to_screaming_snake_case};
 
 /// Omit is used to determine which operations (create, read, update, delete) should be omitted for a given table or column based on its comment.
 /// The comment can contain an @omit annotation followed by a comma-separated list of operations to omit. For example:
@@ -227,6 +232,196 @@ impl Table {
     pub fn omit_delete(&self) -> bool {
         self.omit.delete || self.relkind == Relkind::MaterializedView
     }
+
+    pub fn condition_type_name(&self) -> String {
+        format!("{}Condition", self.type_name())
+    }
+
+    pub fn order_by_enum_name(&self) -> String {
+        format!("{}OrderBy", self.type_name())
+    }
+
+    pub fn connection_type_name(&self) -> String {
+        format!("{}Connection", self.type_name())
+    }
+
+    pub fn edge_type_name(&self) -> String {
+        format!("{}Edge", self.type_name())
+    }
+
+    pub fn edge_type(&self) -> Object {
+        let edge_type_name = self.edge_type_name();
+        let node_type = self.type_name();
+
+        Object::new(&edge_type_name)
+            .field(Field::new(
+                "cursor",
+                TypeRef::named_nn(TypeRef::STRING),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let edge = ctx.parent_value.try_downcast_ref::<EdgePayload>()?;
+                        Ok(Some(FieldValue::value(edge.cursor.clone())))
+                    })
+                },
+            ))
+            .field(Field::new("node", TypeRef::named_nn(node_type), |ctx| {
+                FieldFuture::new(async move {
+                    let edge = ctx.parent_value.try_downcast_ref::<EdgePayload>()?;
+                    Ok(Some(FieldValue::owned_any(edge.node.clone())))
+                })
+            }))
+    }
+
+    pub fn connection_type(&self) -> Object {
+        let type_name = self.type_name();
+        let edge_type_name = self.edge_type_name();
+        let connection_type_name = self.connection_type_name();
+
+        let edge_ref = edge_type_name.clone();
+        Object::new(&connection_type_name)
+            .field(Field::new(
+                "totalCount",
+                TypeRef::named_nn(TypeRef::INT),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        Ok(Some(FieldValue::value(payload.total_count as i32)))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "pageInfo",
+                TypeRef::named_nn("PageInfo"),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        Ok(Some(FieldValue::owned_any(payload.clone())))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "edges",
+                TypeRef::named_nn_list_nn(edge_ref),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        let list: Vec<FieldValue> = payload
+                            .edges
+                            .iter()
+                            .map(|e| FieldValue::owned_any(e.clone()))
+                            .collect();
+                        Ok(Some(FieldValue::list(list)))
+                    })
+                },
+            ))
+            .field(Field::new(
+                "nodes",
+                TypeRef::named_nn_list_nn(type_name),
+                |ctx| {
+                    FieldFuture::new(async move {
+                        let payload = ctx.parent_value.try_downcast_ref::<ConnectionPayload>()?;
+                        let list: Vec<FieldValue> = payload
+                            .edges
+                            .iter()
+                            .map(|e| FieldValue::owned_any(e.node.clone()))
+                            .collect();
+                        Ok(Some(FieldValue::list(list)))
+                    })
+                },
+            ))
+    }
+
+    fn generate_condition_filter_type_name(&self, column: &Column) -> String {
+        format!(
+            "{}{}Filter",
+            self.type_name(),
+            to_pascal_case(column.name())
+        )
+    }
+
+    pub fn condition_type(&self) -> InputObject {
+        self.columns().iter().filter(|c| !c.omit_read()).fold(
+            InputObject::new(self.condition_type_name()),
+            |obj, col| {
+                if condition_type_ref(col).is_some() {
+                    let filter_name = self.generate_condition_filter_type_name(col);
+                    obj.field(InputValue::new(
+                        col.name().as_str(),
+                        TypeRef::named(filter_name),
+                    ))
+                } else {
+                    obj
+                }
+            },
+        )
+    }
+
+    pub fn condition_filter_type(&self, column: &Column) -> Option<InputObject> {
+        condition_type_ref(column).map(|tr| {
+            let scalar_name = tr.to_string();
+            let filter_name = self.generate_condition_filter_type_name(column);
+
+            // example generated input object for a "email" column of type String:
+            // input UserEmailFilter {
+            //   equal: String
+            // }
+            let mut input = InputObject::new(filter_name)
+                .field(InputValue::new("equal", tr.clone()))
+                .field(InputValue::new("notEqual", tr.clone()))
+                .field(InputValue::new("in", TypeRef::named_list(scalar_name)));
+
+            if supports_range(column._type()) {
+                input = input
+                    .field(InputValue::new("greaterThan", tr.clone()))
+                    .field(InputValue::new("greaterThanEqual", tr.clone()))
+                    .field(InputValue::new("lessThan", tr.clone()))
+                    .field(InputValue::new("lessThanEqual", tr));
+            }
+
+            input
+        })
+    }
+
+    pub fn condition_filter_types(&self) -> Vec<InputObject> {
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_read())
+            .filter_map(|col| self.condition_filter_type(col))
+            .collect()
+    }
+
+    pub fn order_by_enum(&self) -> Enum {
+        let name = self.order_by_enum_name();
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_read())
+            .fold(Enum::new(name), |e, col| {
+                e.item(EnumItem::new(format!(
+                    "{}_ASC",
+                    to_screaming_snake_case(col.name())
+                )))
+                .item(EnumItem::new(format!(
+                    "{}_DESC",
+                    to_screaming_snake_case(col.name())
+                )))
+            })
+    }
+}
+
+pub fn supports_range(column_type: &Type) -> bool {
+    matches!(
+        *column_type,
+        Type::INT2
+            | Type::INT4
+            | Type::INT8
+            | Type::FLOAT4
+            | Type::FLOAT8
+            | Type::NUMERIC
+            | Type::DATE
+            | Type::TIME
+            | Type::TIMESTAMP
+            | Type::TIMESTAMPTZ
+    )
 }
 
 #[cfg(test)]

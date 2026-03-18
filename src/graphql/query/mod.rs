@@ -1,35 +1,21 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_graphql::Value as GqlValue;
-use async_graphql::dynamic::{Enum, Field, FieldFuture, InputObject, InputValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, TypeRef};
 use deadpool_postgres::Pool;
 
+use crate::db::error::DbError;
+use crate::db::pool::PoolExt;
+use crate::db::query::select::OrderDirection;
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
-use super::connection::make_connection_types;
-use super::filter::{make_condition_filter_types, make_condition_type, make_order_by_enum};
-use super::sql_scalar::SqlScalar;
-
 mod executor;
 pub(crate) mod sql;
 
-/// Everything the schema builder needs for one table.
-pub struct GeneratedQuery {
-    /// The root Query field (e.g. `allUsers`).
-    pub query_field: Field,
-    /// The `{T}Condition` input type - must be registered with the schema.
-    pub condition_type: InputObject,
-    /// Per-column filter input objects referenced by `{T}Condition`.
-    pub condition_filter_types: Vec<InputObject>,
-    /// The `{T}OrderBy` enum - must be registered with the schema.
-    pub order_by_enum: Enum,
-    /// The `{T}Connection` object type - must be registered with the schema.
-    pub connection_type: Object,
-    /// The `{T}Edge` object type - must be registered with the schema.
-    pub edge_type: Object,
+fn db_err_to_gql(err: DbError) -> async_graphql::Error {
+    async_graphql::Error::new(err.to_string())
 }
 
 /// Generates a root Query field (e.g. `allUsers`) with Turbograph-style
@@ -43,31 +29,16 @@ pub struct GeneratedQuery {
 ///   offset:    Int             # OFFSET
 /// ): UserConnection!
 /// ```
-pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
-    let condition_filter_types = make_condition_filter_types(&table);
-    let condition_type = make_condition_type(&table);
-    let order_by_enum = make_order_by_enum(&table);
-    let (connection_type, edge_type) = make_connection_types(&table);
-
-    let connection_type_name = connection_type.type_name().to_string();
-    let condition_type_name = condition_type.type_name().to_string();
-    let order_by_type_name = order_by_enum.type_name().to_string();
+pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
     let field_name = format!("all{}", to_pascal_case(table.name()));
     let tbl_schema = table.schema_name().to_string();
     let tbl_name = table.name().to_string();
 
     let columns = Arc::new(table.columns().to_vec());
-    let (mut name_map, mut upper_map) = (HashMap::new(), HashMap::new());
-    for (i, col) in columns.iter().enumerate().filter(|(_, c)| !c.omit_read()) {
-        name_map.insert(col.name().to_string(), i);
-        upper_map.insert(col.name().to_uppercase(), i);
-    }
-    let col_by_name = Arc::new(name_map);
-    let col_by_upper = Arc::new(upper_map);
 
     let query_field = Field::new(
         field_name,
-        TypeRef::named_nn(connection_type_name),
+        TypeRef::named_nn(table.connection_type_name()),
         move |ctx| {
             let condition_pairs: Option<Vec<(String, GqlValue)>> = ctx
                 .args
@@ -97,63 +68,71 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedQuery {
             let tbl_schema = tbl_schema.clone();
             let tbl_name = tbl_name.clone();
             let columns = columns.clone();
-            let col_by_name = col_by_name.clone();
-            let col_by_upper = col_by_upper.clone();
             let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
             FieldFuture::new(async move {
-                let mut where_clause = String::new();
-                let mut params = Vec::<SqlScalar>::with_capacity(8);
+                let table_ref = sql::quote_table(&tbl_schema, &tbl_name);
+                let mut select = pool.select(&table_ref);
 
                 if let Some(pairs) = condition_pairs {
-                    sql::build_where_clause(
-                        &mut where_clause,
-                        &mut params,
-                        pairs,
-                        &columns,
-                        &col_by_name,
-                    )?;
+                    sql::apply_gql_conditions(&mut select, pairs, &columns)?;
                 }
 
-                let mut order_clause = String::new();
-                sql::build_order_by_clause(&mut order_clause, &order_by, &columns, &col_by_upper)?;
-
+                let order_pairs = sql::parse_order_by(&order_by, &columns)?;
                 let safe_limit = first.unwrap_or(100).clamp(1, 1000);
                 let off = offset.unwrap_or(0).max(0);
 
-                executor::execute_connection_query(
-                    &pool,
-                    &tbl_schema,
-                    &tbl_name,
-                    &where_clause,
-                    &order_clause,
-                    params,
-                    safe_limit,
-                    off,
+                let (total_count, json_rows) = if !order_pairs.is_empty() {
+                    let first_pair = &order_pairs[0];
+                    let dir = if first_pair.1 == "DESC" {
+                        OrderDirection::Desc
+                    } else {
+                        OrderDirection::Asc
+                    };
+                    let mut ordered = select.order_by(&first_pair.0, dir);
+
+                    for (col, d) in &order_pairs[1..] {
+                        let direction = if *d == "DESC" {
+                            OrderDirection::Desc
+                        } else {
+                            OrderDirection::Asc
+                        };
+                        ordered = ordered.order_by(col, direction);
+                    }
+                    ordered
+                        .limit(safe_limit)
+                        .offset(off)
+                        .execute(tx_config)
+                        .await
+                        .map_err(db_err_to_gql)?
+                } else {
+                    select
+                        .limit(safe_limit)
+                        .offset(off)
+                        .execute(tx_config)
+                        .await
+                        .map_err(db_err_to_gql)?
+                };
+
+                Ok(executor::build_connection_payload(
+                    total_count,
+                    json_rows,
                     &order_by,
-                    tx_config,
-                )
-                .await
+                    off as i64,
+                ))
             })
         },
     )
     .argument(InputValue::new(
         "condition",
-        TypeRef::named(condition_type_name),
+        TypeRef::named(table.condition_type_name()),
     ))
     .argument(InputValue::new(
         "orderBy",
-        TypeRef::named_list(order_by_type_name),
+        TypeRef::named_list(table.order_by_enum_name()),
     ))
     .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
     .argument(InputValue::new("offset", TypeRef::named(TypeRef::INT)));
 
-    GeneratedQuery {
-        query_field,
-        condition_type,
-        condition_filter_types,
-        order_by_enum,
-        connection_type,
-        edge_type,
-    }
+    query_field
 }

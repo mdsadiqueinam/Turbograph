@@ -1,67 +1,139 @@
 use std::collections::HashMap;
-use std::fmt::Write;
 use std::sync::Arc;
 
 use async_graphql::Value as GqlValue;
+use tokio_postgres::types::Type;
 
+use crate::db::operator::Op;
+use crate::db::scalar::{SqlArray, SqlScalar};
+use crate::db::where_clause::WhereBuilder;
 use crate::models::table::Column;
+use crate::utils::inflection::to_screaming_snake_case;
 
-use super::super::filter::{FilterOp, supports_range};
-use super::super::sql_scalar::SqlScalar;
+use super::super::filter::supports_range;
 use super::super::type_mapping::to_sql_scalar;
 
 use crate::error::gql_err;
 
-pub(crate) fn build_where_clause(
-    sql: &mut String,
-    params: &mut Vec<SqlScalar>,
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+pub(crate) fn quote_ident(name: &str) -> String {
+    format!("\"{}\"", name)
+}
+
+/// Builds a schema-qualified table reference: `"schema"."table"`.
+#[inline]
+pub(crate) fn quote_table(schema: &str, table: &str) -> String {
+    format!("\"{}\".\"{}\"", schema, table)
+}
+
+/// Converts a Vec<SqlScalar> to SqlArray based on the column type.
+fn scalars_to_sql_array(ty: &Type, scalars: Vec<SqlScalar>) -> Option<SqlArray> {
+    match *ty {
+        Type::BOOL => Some(SqlArray::Bool(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Bool(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::INT2 => Some(SqlArray::Int2(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Int2(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::INT4 => Some(SqlArray::Int4(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Int4(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::INT8 => Some(SqlArray::Int8(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Int8(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::FLOAT4 => Some(SqlArray::Float4(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Float4(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::FLOAT8 => Some(SqlArray::Float8(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Float8(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR => Some(SqlArray::Text(
+            scalars.into_iter().filter_map(|s| match s {
+                SqlScalar::Text(v) => Some(v),
+                _ => None,
+            }).collect(),
+        )),
+        _ => None,
+    }
+}
+
+/// Applies GraphQL condition pairs to any query builder that implements
+/// [`WhereBuilder`].  Handles simple equality, operator objects
+/// (`equal`, `greaterThan`, …) and `in` lists.
+pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
+    builder: &mut T,
     pairs: Vec<(String, GqlValue)>,
     columns: &[Arc<Column>],
-    col_by_name: &HashMap<String, usize>,
 ) -> Result<(), async_graphql::Error> {
-    let mut has_where = false;
+    let col_by_name: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.name().to_string(), i))
+        .collect();
 
     for (key, gql_val) in pairs {
         let Some(&col_idx) = col_by_name.get(&key) else {
             continue;
         };
         let col = &columns[col_idx];
+        let quoted = quote_ident(col.name());
 
         if !matches!(gql_val, GqlValue::Object(_)) {
             if let Some(scalar) = to_sql_scalar(col, &gql_val) {
-                write_where_sep(sql, &mut has_where);
-                write!(sql, "\"{}\" = ${}", col.name(), params.len() + 1).unwrap();
-                params.push(scalar);
+                builder.where_clause(&quoted, Op::Eq, Some(scalar));
             }
             continue;
         }
 
         if let GqlValue::Object(op_obj) = gql_val {
             for (op_key, op_val) in op_obj {
-                let Some(op) = FilterOp::from_key(op_key.as_str()) else {
+                let Some(filter_op) = Op::from_key(op_key.as_str()) else {
                     continue;
                 };
 
-                if op == FilterOp::In {
-                    push_in_clause(sql, params, col, op_val, &mut has_where)?;
+                if filter_op == Op::In {
+                    if let GqlValue::List(values) = op_val {
+                        if values.len() > 10_000 {
+                            return Err(gql_err("IN filter exceeds maximum of 10,000 items"));
+                        }
+                        let scalars: Vec<SqlScalar> = values
+                            .into_iter()
+                            .filter_map(|val| to_sql_scalar(col, &val))
+                            .collect();
+                        if let Some(sql_array) = scalars_to_sql_array(col._type(), scalars) {
+                            builder.where_in(&quoted, sql_array);
+                        }
+                    }
                     continue;
                 }
 
-                if op.is_range() && !supports_range(col._type()) {
+                if filter_op.is_range() && !supports_range(col._type()) {
                     continue;
                 }
+
+                let op = filter_op;
 
                 if let Some(scalar) = to_sql_scalar(col, &op_val) {
-                    write_where_sep(sql, &mut has_where);
-                    write!(
-                        sql,
-                        "\"{}\" {} ${}",
-                        col.name(),
-                        op.sql_operator(),
-                        params.len() + 1
-                    )
-                    .unwrap();
-                    params.push(scalar);
+                    builder.where_clause(&quoted, op, Some(scalar));
                 }
             }
         }
@@ -69,50 +141,24 @@ pub(crate) fn build_where_clause(
     Ok(())
 }
 
-fn push_in_clause(
-    sql: &mut String,
-    params: &mut Vec<SqlScalar>,
-    col: &Column,
-    op_val: GqlValue,
-    has_where: &mut bool,
-) -> Result<(), async_graphql::Error> {
-    if let GqlValue::List(values) = op_val {
-        if values.len() > 10_000 {
-            return Err(gql_err("IN filter exceeds maximum of 10,000 items"));
-        }
-        let scalars: Vec<SqlScalar> = values
-            .into_iter()
-            .filter_map(|val| to_sql_scalar(col, &val))
-            .collect();
-
-        if !scalars.is_empty() {
-            write_where_sep(sql, has_where);
-            let start = params.len() + 1;
-            write!(sql, "\"{}\" IN (", col.name()).unwrap();
-            for (i, scalar) in scalars.into_iter().enumerate() {
-                if i > 0 {
-                    sql.push_str(", ");
-                }
-                write!(sql, "${}", start + i).unwrap();
-                params.push(scalar);
-            }
-            sql.push(')');
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn build_order_by_clause(
-    sql: &mut String,
+/// Parses a list of GraphQL `orderBy` enum values (e.g. `["NAME_ASC", "ID_DESC"]`)
+/// and returns a list of `(quoted_column, direction)` pairs.
+pub(super) fn parse_order_by(
     order_by: &[String],
     columns: &[Arc<Column>],
-    col_by_upper: &HashMap<String, usize>,
-) -> Result<(), async_graphql::Error> {
+) -> Result<Vec<(String, &'static str)>, async_graphql::Error> {
     if order_by.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
-    sql.push_str(" ORDER BY ");
-    for (i, s) in order_by.iter().enumerate() {
+
+    let col_by_upper: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (to_screaming_snake_case(c.name()), i))
+        .collect();
+
+    let mut result = Vec::with_capacity(order_by.len());
+    for s in order_by {
         let (col_upper, dir) = if let Some(c) = s.strip_suffix("_DESC") {
             (c, "DESC")
         } else if let Some(c) = s.strip_suffix("_ASC") {
@@ -123,20 +169,7 @@ pub(super) fn build_order_by_clause(
         let Some(&col_idx) = col_by_upper.get(col_upper) else {
             return Err(gql_err(format!("unknown column for ordering: {col_upper}")));
         };
-        if i > 0 {
-            sql.push_str(", ");
-        }
-        write!(sql, "\"{}\" {}", columns[col_idx].name(), dir).unwrap();
+        result.push((quote_ident(columns[col_idx].name()), dir));
     }
-    Ok(())
-}
-
-#[inline]
-fn write_where_sep(sql: &mut String, has_where: &mut bool) {
-    if *has_where {
-        sql.push_str(" AND ");
-    } else {
-        sql.push_str(" WHERE ");
-        *has_where = true;
-    }
+    Ok(result)
 }

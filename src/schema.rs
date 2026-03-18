@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::graphql;
 use crate::models::config::{Config, PoolConfig};
+use crate::models::table::Table;
 
 /// The main entry point for consuming the library.
 ///
@@ -92,6 +93,7 @@ pub(crate) async fn rebuild_schema(
     schemas: &[String],
 ) -> Result<Schema, Box<dyn std::error::Error + Send + Sync>> {
     let tables = crate::db::introspect::get_tables(pool, schemas).await;
+    let tables: Vec<Arc<Table>> = tables.into_iter().map(|t| Arc::new(t)).collect();
 
     let mut query_root = Object::new("Query");
     let mut mutation_root = Object::new("Mutation");
@@ -99,22 +101,21 @@ pub(crate) async fn rebuild_schema(
     // First pass: collect entity, query, and mutation artefacts per table.
     struct TableArtefacts {
         entity: Object,
-        query: crate::graphql::query::GeneratedQuery,
+        query: async_graphql::dynamic::Field,
         mutation: Option<crate::graphql::mutation::GeneratedMutation>,
     }
 
     let mut artefacts = Vec::new();
 
-    for table in tables {
+    for table in tables.iter() {
         if table.omit_read() {
             continue;
         }
 
-        let table = Arc::new(table);
         let entity = graphql::generate_entity(table.clone());
         let gq = graphql::generate_query(table.clone(), pool.clone());
         let gm = if !table.omit_create() || !table.omit_update() || !table.omit_delete() {
-            Some(graphql::generate_mutation(table, pool.clone()))
+            Some(graphql::generate_mutation(table.clone(), pool.clone()))
         } else {
             None
         };
@@ -142,18 +143,21 @@ pub(crate) async fn rebuild_schema(
 
     builder = builder.register(graphql::make_page_info_type());
 
-    for a in artefacts {
-        query_root = query_root.field(a.query.query_field);
+    for table in tables.iter() {
         builder = builder
-            .register(a.entity)
-            .register(a.query.condition_type)
-            .register(a.query.order_by_enum)
-            .register(a.query.connection_type)
-            .register(a.query.edge_type);
+            .register(table.condition_type())
+            .register(table.order_by_enum())
+            .register(table.connection_type())
+            .register(table.edge_type());
 
-        for ft in a.query.condition_filter_types {
+        for ft in table.condition_filter_types() {
             builder = builder.register(ft);
         }
+    }
+
+    for a in artefacts {
+        query_root = query_root.field(a.query);
+        builder = builder.register(a.entity);
 
         if let Some(gm) = a.mutation {
             for field in gm.fields {
