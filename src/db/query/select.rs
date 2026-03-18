@@ -1,10 +1,10 @@
 use std::fmt::Write;
 use std::marker::PhantomData;
 
-use crate::db::pool::PoolExt;
 use crate::TransactionConfig;
-use crate::db::error::DbError;
 use crate::db::JsonListExt;
+use crate::db::error::DbError;
+use crate::db::pool::PoolExt;
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
@@ -52,12 +52,24 @@ pub struct Select<O = NoOrder> {
 // ── QueryBase ─────────────────────────────────────────────────────────────────
 
 impl<O> QueryBase for Select<O> {
-    fn table(&self) -> &str { &self.table }
-    fn get_where_clause(&self) -> &str { &self.where_clause }
-    fn get_where_clause_mut(&mut self) -> &mut String { &mut self.where_clause }
-    fn params(&self) -> &[SqlScalar] { &self.params }
-    fn params_mut(&mut self) -> &mut Vec<SqlScalar> { &mut self.params }
-    fn pool(&self) -> &Pool { &self.pool }
+    fn table(&self) -> &str {
+        &self.table
+    }
+    fn get_where_clause(&self) -> &str {
+        &self.where_clause
+    }
+    fn get_where_clause_mut(&mut self) -> &mut String {
+        &mut self.where_clause
+    }
+    fn params(&self) -> &[SqlScalar] {
+        &self.params
+    }
+    fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
+        &mut self.params
+    }
+    fn pool(&self) -> &Pool {
+        &self.pool
+    }
 }
 
 // Only NoOrder gets WHERE support
@@ -115,13 +127,13 @@ impl<O> Select<O> {
         params
     }
 
-    pub fn limit(mut self, limit: i32) -> Self {
-        self.limit = Some(SqlScalar::Int4(limit));
+    pub fn limit(mut self, limit: i64) -> Self {
+        self.limit = Some(SqlScalar::Int8(limit));
         self
     }
 
-    pub fn offset(mut self, offset: i32) -> Self {
-        self.offset = Some(SqlScalar::Int4(offset));
+    pub fn offset(mut self, offset: i64) -> Self {
+        self.offset = Some(SqlScalar::Int8(offset));
         self
     }
 
@@ -193,7 +205,9 @@ impl<O> Select<O> {
             .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
         if let Some(ref cfg) = tx_config {
-            apply_settings(&*client, cfg).await.map_err(|e| DbError::Transaction(e.to_string()))?;
+            apply_settings(&*client, cfg)
+                .await
+                .map_err(|e| DbError::Transaction(e.to_string()))?;
         }
 
         let count_q = self.get_count_query();
@@ -356,8 +370,7 @@ mod tests {
     #[test]
     fn test_select_single_order() {
         let pool = test_pool();
-        let q = pool.select("users")
-            .order_by("name", OrderDirection::Asc);
+        let q = pool.select("users").order_by("name", OrderDirection::Asc);
         let clause = q.get_order_clause();
         assert!(clause.contains("ORDER BY"));
         assert!(clause.contains("name ASC"));
@@ -366,7 +379,8 @@ mod tests {
     #[test]
     fn test_select_multiple_order() {
         let pool = test_pool();
-        let q = pool.select("users")
+        let q = pool
+            .select("users")
             .order_by("created_at", OrderDirection::Desc)
             .order_by("id", OrderDirection::Asc);
         let clause = q.get_order_clause();
@@ -378,15 +392,15 @@ mod tests {
     #[test]
     fn test_select_order_appears_in_query() {
         let pool = test_pool();
-        let q = pool.select("posts")
-            .order_by("date", OrderDirection::Desc);
+        let q = pool.select("posts").order_by("date", OrderDirection::Desc);
         assert!(q.get_select_query().contains("ORDER BY date DESC"));
     }
 
     #[test]
     fn test_select_order_before_limit() {
         let pool = test_pool();
-        let q = pool.select("posts")
+        let q = pool
+            .select("posts")
             .order_by("id", OrderDirection::Asc)
             .limit(10);
         let sql = q.get_select_query();
