@@ -102,7 +102,7 @@ pub(crate) async fn rebuild_schema(
     struct TableArtefacts {
         entity: Object,
         query: async_graphql::dynamic::Field,
-        mutation: Option<crate::graphql::mutation::GeneratedMutation>,
+        mutation: Vec<async_graphql::dynamic::Field>,
     }
 
     let mut artefacts = Vec::new();
@@ -115,9 +115,9 @@ pub(crate) async fn rebuild_schema(
         let entity = graphql::generate_entity(table.clone());
         let gq = graphql::generate_query(table.clone(), pool.clone());
         let gm = if !table.omit_create() || !table.omit_update() || !table.omit_delete() {
-            Some(graphql::generate_mutation(table.clone(), pool.clone()))
+            graphql::generate_mutation(table.clone(), pool.clone())
         } else {
-            None
+            Vec::new()
         };
 
         artefacts.push(TableArtefacts {
@@ -127,9 +127,7 @@ pub(crate) async fn rebuild_schema(
         });
     }
 
-    let has_mutations = artefacts
-        .iter()
-        .any(|a| a.mutation.as_ref().is_some_and(|m| !m.fields.is_empty()));
+    let has_mutations = artefacts.iter().any(|a| !a.mutation.is_empty());
 
     let mut builder = Schema::build(
         "Query",
@@ -153,19 +151,22 @@ pub(crate) async fn rebuild_schema(
         for ft in table.condition_filter_types() {
             builder = builder.register(ft);
         }
+
+        // Register mutation input objects directly from the table
+        if !table.omit_create() {
+            builder = builder.register(table.create_type());
+        }
+        if !table.omit_update() {
+            builder = builder.register(table.update_type());
+        }
     }
 
     for a in artefacts {
         query_root = query_root.field(a.query);
         builder = builder.register(a.entity);
 
-        if let Some(gm) = a.mutation {
-            for field in gm.fields {
-                mutation_root = mutation_root.field(field);
-            }
-            for input in gm.input_objects {
-                builder = builder.register(input);
-            }
+        for field in a.mutation {
+            mutation_root = mutation_root.field(field);
         }
     }
 
