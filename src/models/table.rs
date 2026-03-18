@@ -249,6 +249,14 @@ impl Table {
         format!("{}Edge", self.type_name())
     }
 
+    pub fn create_type_name(&self) -> String {
+        format!("Create{}Input", self.type_name())
+    }
+
+    pub fn update_type_name(&self) -> String {
+        format!("Update{}Patch", self.type_name())
+    }
+
     pub fn edge_type(&self) -> Object {
         let edge_type_name = self.edge_type_name();
         let node_type = self.type_name();
@@ -354,6 +362,37 @@ impl Table {
                 }
             },
         )
+    }
+
+    pub fn create_type(&self) -> InputObject {
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_create())
+            .fold(InputObject::new(self.create_type_name()), |obj, col| {
+                if let Some(tr) = condition_type_ref(col) {
+                    let type_ref: TypeRef = if !col.nullable() && !col.has_default() {
+                        TypeRef::named_nn(tr.to_string())
+                    } else {
+                        tr
+                    };
+                    obj.field(InputValue::new(col.name().as_str(), type_ref))
+                } else {
+                    obj
+                }
+            })
+    }
+
+    pub fn update_type(&self) -> InputObject {
+        self.columns()
+            .iter()
+            .filter(|c| !c.omit_update())
+            .fold(InputObject::new(self.update_type_name()), |obj, col| {
+                if let Some(tr) = condition_type_ref(col) {
+                    obj.field(InputValue::new(col.name().as_str(), tr))
+                } else {
+                    obj
+                }
+            })
     }
 
     pub fn condition_filter_type(&self, column: &Column) -> Option<InputObject> {

@@ -12,7 +12,7 @@ use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
 use super::super::query::sql::{apply_gql_conditions, quote_ident, quote_table};
-use super::super::type_mapping::to_sql_scalar;
+use super::super::type_mapping::{condition_type_ref, to_sql_scalar};
 
 fn db_err_to_gql(err: DbError) -> async_graphql::Error {
     async_graphql::Error::new(err.to_string())
@@ -25,9 +25,16 @@ pub(super) async fn execute_create(
     tbl_name: &str,
     input: Vec<(String, GqlValue)>,
     columns: &[Arc<Column>],
-    col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
+    // Build col_map from columns (skip omitted for create and those without condition_type_ref)
+    let col_map: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .filter(|(_, col)| !col.omit_create() && condition_type_ref(col).is_some())
+        .map(|(i, col)| (col.name().clone(), i))
+        .collect();
+
     let table_ref = quote_table(tbl_schema, tbl_name);
     let mut insert = pool.insert(&table_ref);
     insert.returning_all();
@@ -72,9 +79,16 @@ pub(super) async fn execute_update(
     patch: Vec<(String, GqlValue)>,
     condition: Option<Vec<(String, GqlValue)>>,
     columns: &[Arc<Column>],
-    update_col_map: &HashMap<String, usize>,
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
+    // Build col_map from columns (skip omitted for update and those without condition_type_ref)
+    let update_col_map: HashMap<String, usize> = columns
+        .iter()
+        .enumerate()
+        .filter(|(_, col)| !col.omit_update() && condition_type_ref(col).is_some())
+        .map(|(i, col)| (col.name().clone(), i))
+        .collect();
+
     let table_ref = quote_table(tbl_schema, tbl_name);
     let mut update = pool.update(&table_ref);
     update.returning_all();
