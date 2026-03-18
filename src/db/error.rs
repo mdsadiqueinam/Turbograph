@@ -1,10 +1,18 @@
 use std::fmt;
 
+/// Errors that can occur during database operations.
 #[derive(Debug, Clone)]
 pub enum DbError {
+    /// The connection pool could not supply a client.
+    ///
+    /// Typically indicates exhausted connections or an unreachable server.
     Pool(String),
+    /// An error occurred while managing the transaction (`BEGIN`, `COMMIT`,
+    /// or `ROLLBACK`), or while applying `SET LOCAL` settings.
     Transaction(String),
+    /// The SQL query itself failed (e.g. constraint violation, syntax error).
     Query(String),
+    /// Input validation failed before a query was sent to the database.
     Validation(String),
 }
 

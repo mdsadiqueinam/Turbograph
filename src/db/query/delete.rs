@@ -11,6 +11,28 @@ use super::{QueryBase, SupportsWhere};
 
 // ── Delete struct ─────────────────────────────────────────────────────────────
 
+/// SQL `DELETE FROM` query builder.
+///
+/// Create instances via [`PoolExt::delete`](crate::db::pool::PoolExt::delete).
+///
+/// Use [`WhereBuilder`](crate::db::where_clause::WhereBuilder) methods to add
+/// a `WHERE` clause and optionally append `RETURNING *` with
+/// [`returning_all`](Delete::returning_all).
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use turbograph::db::pool::PoolExt;
+/// use turbograph::db::operator::Op;
+/// use turbograph::db::scalar::SqlScalar;
+/// use turbograph::db::where_clause::WhereBuilder;
+///
+/// # async fn example(pool: deadpool_postgres::Pool) -> Result<(), turbograph::DbError> {
+/// let mut q = pool.delete("users");
+/// q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(42)));
+/// let affected = q.execute(None).await?;
+/// # Ok(()) }
+/// ```
 pub struct Delete {
     table: String,
     params: Vec<SqlScalar>,
@@ -63,6 +85,7 @@ impl Delete {
         self
     }
 
+    /// Returns the `WHERE`-clause parameters as trait objects.
     pub fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
@@ -70,6 +93,7 @@ impl Delete {
             .collect()
     }
 
+    /// Returns the full `DELETE FROM … [WHERE …] [RETURNING *]` SQL string.
     pub fn get_query(&self) -> String {
         let mut q = if self.where_clause.is_empty() {
             format!("DELETE FROM {}", self.table)
@@ -84,6 +108,7 @@ impl Delete {
         q
     }
 
+    /// Execute the delete and return the number of rows affected.
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.where_params();

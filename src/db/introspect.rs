@@ -16,6 +16,15 @@ fn map_columns_to_table(tables: Vec<Table>, columns: Vec<Column>) -> Vec<Table> 
     table_map.into_values().collect()
 }
 
+/// Introspects the PostgreSQL catalog and returns all tables and materialized
+/// views in the given `schemas`, with their columns populated.
+///
+/// Uses `pg_catalog.pg_class` and `pg_catalog.pg_attribute` to discover
+/// tables, their columns, data types, nullability, defaults, and
+/// object comments.  Object comments are read from `pg_catalog.obj_description`
+/// and parsed into [`Omit`](crate::models::table::Omit) values by
+/// `Table::from_row` / `Column::form_row`, allowing schema generation to
+/// suppress fields and mutations according to the `@omit` annotation.
 pub async fn get_tables(pool: &deadpool_postgres::Pool, schemas: &[String]) -> Vec<Table> {
     let client = pool.get().await.unwrap();
     let tables: Vec<Table> = client

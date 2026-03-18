@@ -14,19 +14,33 @@ use super::{QueryBase, SupportsWhere};
 
 // ── Order-phase markers ───────────────────────────────────────────────────────
 
-/// WHERE clauses are still allowed.
+/// Type-state marker indicating that no `ORDER BY` has been applied yet.
+///
+/// In this phase [`WhereBuilder`](crate::db::where_clause::WhereBuilder)
+/// methods are available on the `Select`.
 pub struct NoOrder;
-/// ORDER BY has been applied; only `.execute()`, `.limit()`, `.offset()`, and more `.order_by()` are legal.
+
+/// Type-state marker indicating that at least one `ORDER BY` clause has been
+/// applied.
+///
+/// Once a `Select` transitions to `Ordered`, `WHERE` mutations are locked
+/// out at compile time to prevent accidentally appending conditions after the
+/// order columns have been committed.  `limit`, `offset`, and additional
+/// `order_by` calls are still available.
 pub struct Ordered;
 
 // ── ORDER BY direction ────────────────────────────────────────────────────────
 
+/// Sort direction for an `ORDER BY` column.
 pub enum OrderDirection {
+    /// Ascending order (`ASC`).
     Asc,
+    /// Descending order (`DESC`).
     Desc,
 }
 
 impl OrderDirection {
+    /// Returns the SQL keyword for this direction (`"ASC"` or `"DESC"`).
     pub fn as_str(&self) -> &'static str {
         match self {
             OrderDirection::Asc => "ASC",
@@ -37,6 +51,31 @@ impl OrderDirection {
 
 // ── Select struct ─────────────────────────────────────────────────────────────
 
+/// SQL `SELECT` query builder.
+///
+/// Create instances via [`PoolExt::select`](crate::db::pool::PoolExt::select).
+///
+/// The type parameter `O` is a compile-time phase marker:
+/// - [`Select<NoOrder>`] — `WHERE` clauses are permitted.
+/// - [`Select<Ordered>`] — transitions after the first [`order_by`] call;
+///   `WHERE` mutations are no longer allowed.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use turbograph::db::pool::PoolExt;
+/// use turbograph::db::operator::Op;
+/// use turbograph::db::scalar::SqlScalar;
+/// use turbograph::db::where_clause::WhereBuilder;
+/// use turbograph::db::query::select::OrderDirection;
+///
+/// # async fn example(pool: deadpool_postgres::Pool) -> Result<(), turbograph::DbError> {
+/// let mut q = pool.select("users");
+/// q.where_clause("active", Op::Eq, Some(SqlScalar::Bool(true)));
+/// let q = q.order_by("created_at", OrderDirection::Desc).limit(20);
+/// let (total, rows) = q.execute(None).await?;
+/// # Ok(()) }
+/// ```
 pub struct Select<O = NoOrder> {
     table: String,
     params: Vec<SqlScalar>,
@@ -108,6 +147,8 @@ impl<O> Select<O> {
         }
     }
 
+    /// Returns the `WHERE`-clause parameters as trait objects suitable for
+    /// passing directly to `tokio_postgres`.
     pub fn where_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         self.params
             .iter()
@@ -115,6 +156,8 @@ impl<O> Select<O> {
             .collect()
     }
 
+    /// Returns all parameters for the full `SELECT` query: `WHERE` params
+    /// followed by the optional `LIMIT` and `OFFSET` params.
     pub fn select_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         let mut params = self.where_params();
         if let Some(limit) = &self.limit {
@@ -126,23 +169,31 @@ impl<O> Select<O> {
         params
     }
 
+    /// Set the maximum number of rows to return (`LIMIT $n`).
     pub fn limit(mut self, limit: i64) -> Self {
         self.limit = Some(SqlScalar::Int8(limit));
         self
     }
 
+    /// Skip the first `offset` rows (`OFFSET $n`).
     pub fn offset(mut self, offset: i64) -> Self {
         self.offset = Some(SqlScalar::Int8(offset));
         self
     }
 
-    /// Append an ORDER BY column. Returns `Select<Ordered>` so that
-    /// WHERE clauses are locked out, but further `order_by`/`limit`/`offset` calls still work.
+    /// Append an `ORDER BY column direction` clause and transition to
+    /// [`Select<Ordered>`].
+    ///
+    /// After this call, `WHERE` mutations are no longer available at the
+    /// type level, but `order_by`, `limit`, and `offset` remain usable.
     pub fn order_by(mut self, column: &str, direction: OrderDirection) -> Select<Ordered> {
         self.orders.push((column.to_string(), direction));
         self.into_phase()
     }
 
+    /// Returns the `SELECT COUNT(*) FROM …` SQL string (with any `WHERE`
+    /// clause appended).  Used internally to fetch the total row count in
+    /// parallel with the data query.
     pub fn get_count_query(&self) -> String {
         if self.where_clause.is_empty() {
             format!("SELECT COUNT(*) FROM {}", self.table)
@@ -151,6 +202,8 @@ impl<O> Select<O> {
         }
     }
 
+    /// Returns the `ORDER BY …` fragment, or an empty string when no ordering
+    /// has been applied.
     pub fn get_order_clause(&self) -> String {
         if self.orders.is_empty() {
             String::new()
@@ -164,6 +217,8 @@ impl<O> Select<O> {
         }
     }
 
+    /// Returns the full `SELECT * FROM … [WHERE …] [ORDER BY …] [LIMIT $n] [OFFSET $n]`
+    /// SQL string.
     pub fn get_select_query(&self) -> String {
         let mut q = if self.where_clause.is_empty() {
             format!("SELECT * FROM {}", self.table)
@@ -187,6 +242,14 @@ impl<O> Select<O> {
         q
     }
 
+    /// Execute the query and return `(total_count, rows)`.
+    ///
+    /// Runs the count query and data query concurrently inside a single
+    /// transaction.  The total count reflects all matching rows before
+    /// pagination; `rows` contains only the current page.
+    ///
+    /// Pass a [`TransactionConfig`] to apply role, isolation level, or
+    /// `SET LOCAL` settings.
     pub async fn execute(
         &self,
         tx_config: Option<TransactionConfig>,

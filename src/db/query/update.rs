@@ -14,6 +14,33 @@ use super::{QueryBase, SupportsWhere};
 
 // ── Update struct ─────────────────────────────────────────────────────────────
 
+/// SQL `UPDATE` query builder.
+///
+/// Create instances via [`PoolExt::update`](crate::db::pool::PoolExt::update).
+///
+/// Combine [`set`](Update::set) calls to build the `SET` clause, then use
+/// [`WhereBuilder`](crate::db::where_clause::WhereBuilder) methods to add
+/// a `WHERE` clause.  Append `RETURNING *` with
+/// [`returning_all`](Update::returning_all) and execute via
+/// [`execute_with_returning`](Update::execute_with_returning) to get back the
+/// modified rows.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use turbograph::db::pool::PoolExt;
+/// use turbograph::db::operator::Op;
+/// use turbograph::db::scalar::SqlScalar;
+/// use turbograph::db::where_clause::WhereBuilder;
+///
+/// # async fn example(pool: deadpool_postgres::Pool) -> Result<(), turbograph::DbError> {
+/// let mut q = pool.update("users");
+/// q.set("email", Some(SqlScalar::Text("new@example.com".into())));
+/// q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
+/// q.returning_all();
+/// let rows = q.execute_with_returning(None).await?;
+/// # Ok(()) }
+/// ```
 pub struct Update {
     table: String,
     params: Vec<SqlScalar>,
@@ -74,6 +101,7 @@ impl Update {
         self
     }
 
+    /// Returns all parameters as trait objects in `SET`-then-`WHERE` order.
     pub fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         // SET params come first, then WHERE params
         let mut params: Vec<&(dyn ToSql + Sync)> = self
@@ -87,6 +115,10 @@ impl Update {
         params
     }
 
+    /// Returns the full `UPDATE … SET … [WHERE …] [RETURNING *]` SQL string.
+    ///
+    /// `WHERE` parameter indices are automatically shifted to account for the
+    /// `SET` parameters that precede them.
     pub fn get_query(&self) -> String {
         let mut q = format!("UPDATE {}", self.table);
 
@@ -120,6 +152,7 @@ impl Update {
         q
     }
 
+    /// Execute the update and return the number of rows affected.
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();

@@ -167,6 +167,20 @@ fn build_delete_field(
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
+/// Generates the root `Mutation` fields for a database table.
+///
+/// Depending on the table's `@omit` annotations and its [`Relkind`], up to
+/// three mutation fields are generated:
+///
+/// | Field               | GraphQL signature                                  |
+/// |---------------------|----------------------------------------------------|
+/// | `createXxx`         | `createUser(input: CreateUserInput!): User`        |
+/// | `updateXxx`         | `updateUser(patch: UpdateUserPatch!, condition: UserCondition): [User!]!` |
+/// | `deleteXxx`         | `deleteUser(condition: UserCondition): [User!]!`   |
+///
+/// The returned `Vec` may be empty when all mutations are suppressed.
+///
+/// [`Relkind`]: crate::models::table::Relkind
 pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> Vec<Field> {
     let mut fields = Vec::new();
 

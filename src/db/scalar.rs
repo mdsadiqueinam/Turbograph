@@ -3,14 +3,27 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use tokio_postgres::types::{IsNull, ToSql, Type};
 
 /// Typed SQL array parameter wrapper.
+///
+/// Wraps a homogeneous Rust `Vec` so it can be passed as a single
+/// `$n` parameter in a `WHERE column = ANY($n)` clause.
+///
+/// The inner vec must match the target PostgreSQL array type
+/// (e.g. `SqlArray::Text` → `TEXT[]`).
 #[derive(Debug, Clone)]
 pub enum SqlArray {
+    /// `BOOL[]`
     Bool(Vec<bool>),
+    /// `INT2[]`
     Int2(Vec<i16>),
+    /// `INT4[]`
     Int4(Vec<i32>),
+    /// `INT8[]`
     Int8(Vec<i64>),
+    /// `FLOAT4[]`
     Float4(Vec<f32>),
+    /// `FLOAT8[]`
     Float8(Vec<f64>),
+    /// `TEXT[]`
     Text(Vec<String>),
 }
 
@@ -48,8 +61,29 @@ impl ToSql for SqlArray {
 }
 
 /// Typed SQL parameter wrapper.
-/// Lets callers build a `Vec<SqlScalar>` and borrow as
-/// `&[&(dyn ToSql + Sync)]` for `tokio_postgres::Client::query`.
+///
+/// `SqlScalar` lets callers build a heterogeneous `Vec<SqlScalar>` and then
+/// borrow it as `&[&(dyn ToSql + Sync)]` for
+/// `tokio_postgres::Client::query` / `execute`.
+///
+/// Each variant maps to a specific PostgreSQL type:
+///
+/// | Variant        | PostgreSQL type(s)              |
+/// |----------------|---------------------------------|
+/// | `Bool`         | `BOOL`                          |
+/// | `Int2`         | `INT2` / `SMALLINT`             |
+/// | `Int4`         | `INT4` / `INTEGER`              |
+/// | `Int8`         | `INT8` / `BIGINT`               |
+/// | `Float4`       | `FLOAT4` / `REAL`               |
+/// | `Float8`       | `FLOAT8` / `DOUBLE PRECISION`   |
+/// | `Numeric`      | `NUMERIC`                       |
+/// | `Text`         | `TEXT`, `VARCHAR`, `BPCHAR`     |
+/// | `Json`         | `JSON`, `JSONB`                 |
+/// | `Date`         | `DATE`                          |
+/// | `Time`         | `TIME`                          |
+/// | `Timestamp`    | `TIMESTAMP`                     |
+/// | `Timestamptz`  | `TIMESTAMPTZ`                   |
+/// | `Array`        | Array types — see [`SqlArray`]  |
 #[derive(Debug, Clone)]
 pub(crate) enum SqlScalar {
     Bool(bool),
