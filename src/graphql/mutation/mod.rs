@@ -1,18 +1,13 @@
 use std::sync::Arc;
 
 use async_graphql::Value as GqlValue;
-use async_graphql::dynamic::{Field, FieldFuture, InputObject, InputValue, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, TypeRef};
 use deadpool_postgres::Pool;
 
 use crate::models::table::{Column, Table};
 use crate::models::transaction::TransactionConfig;
 
 mod executor;
-
-pub struct GeneratedMutation {
-    pub fields: Vec<Field>,
-    pub input_objects: Vec<InputObject>,
-}
 
 // ── CREATE ────────────────────────────────────────────────────────────────────
 
@@ -23,9 +18,9 @@ fn build_create_field(
     tbl_name: String,
     all_columns: Arc<Vec<Arc<Column>>>,
     pool: Arc<Pool>,
-) -> (Field, InputObject) {
+) -> Field {
     // input_name moved directly — no clone needed
-    let field = Field::new(
+    Field::new(
         format!("create{}", type_name),
         TypeRef::named(type_name),
         move |ctx| {
@@ -55,9 +50,7 @@ fn build_create_field(
     .argument(InputValue::new(
         "input",
         TypeRef::named_nn(table.create_type_name()),
-    )); // moved, no clone
-
-    (field, table.create_type())
+    )) // moved, no clone
 }
 
 // ── UPDATE ────────────────────────────────────────────────────────────────────
@@ -69,8 +62,8 @@ fn build_update_field(
     tbl_name: String,
     all_columns: Arc<Vec<Arc<Column>>>,
     pool: Arc<Pool>,
-) -> (Field, InputObject) {
-    let field = Field::new(
+) -> Field {
+    Field::new(
         format!("update{}", type_name),
         TypeRef::named_nn_list_nn(type_name),
         move |ctx| {
@@ -122,9 +115,7 @@ fn build_update_field(
     .argument(InputValue::new(
         "condition",
         TypeRef::named(table.condition_type_name()),
-    )); // moved, no clone
-
-    (field, table.update_type())
+    )) // moved, no clone
 }
 
 // ── DELETE ────────────────────────────────────────────────────────────────────
@@ -176,9 +167,8 @@ fn build_delete_field(
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutation {
+pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> Vec<Field> {
     let mut fields = Vec::new();
-    let mut input_objects = Vec::new();
 
     let type_name = table.type_name(); // presumably returns String
     let tbl_schema = table.schema_name().to_string();
@@ -186,7 +176,7 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
     let all_columns: Arc<Vec<Arc<Column>>> = Arc::new(table.columns().to_vec());
 
     if !table.omit_create() {
-        let (field, input) = build_create_field(
+        let field = build_create_field(
             &table,
             type_name.clone(),
             tbl_schema.clone(),
@@ -195,11 +185,10 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
             pool.clone(),
         );
         fields.push(field);
-        input_objects.push(input);
     }
 
     if !table.omit_update() {
-        let (field, input) = build_update_field(
+        let field = build_update_field(
             &table,
             type_name.clone(),
             tbl_schema.clone(),
@@ -208,7 +197,6 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
             pool.clone(),
         );
         fields.push(field);
-        input_objects.push(input);
     }
 
     if !table.omit_delete() {
@@ -222,8 +210,5 @@ pub fn generate_mutation(table: Arc<Table>, pool: Arc<Pool>) -> GeneratedMutatio
         fields.push(field);
     }
 
-    GeneratedMutation {
-        fields,
-        input_objects,
-    }
+    fields
 }
