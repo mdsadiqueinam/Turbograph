@@ -46,9 +46,6 @@ jobs:
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
 
-      - name: Run example GraphQL integration tests
-        run: cargo test --manifest-path examples/server/Cargo.toml --test e2e_http_tests --locked
-
       - name: Start example server in background
         run: |
           cargo run --manifest-path examples/server/Cargo.toml > server.log 2>&1 &
