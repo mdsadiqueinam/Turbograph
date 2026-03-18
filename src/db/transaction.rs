@@ -97,7 +97,7 @@ pub(super) fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> St
                 tokio_postgres::IsolationLevel::Serializable => "SERIALIZABLE",
                 _ => "READ COMMITTED",
             };
-            write!(begin, " ISOLATION LEVEL {lvl_str}").unwrap();
+            write!(begin, " ISOLATION LEVEL {lvl_str}").expect("write to String cannot fail");
         }
         if cfg.read_only {
             begin.push_str(" READ ONLY");

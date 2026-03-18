@@ -117,7 +117,7 @@ impl Insert {
                     if col_idx > 0 {
                         q.push_str(", ");
                     }
-                    write!(q, "${param_idx}").unwrap();
+                    write!(q, "${param_idx}").expect("write to String cannot fail");
                     param_idx += 1;
                 }
                 q.push(')');

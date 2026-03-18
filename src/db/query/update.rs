@@ -99,7 +99,7 @@ impl Update {
                 if !first {
                     q.push_str(", ");
                 }
-                write!(q, "{col} = ${idx}").unwrap();
+                write!(q, "{col} = ${idx}").expect("write to String cannot fail");
                 idx += 1;
                 first = false;
             }
