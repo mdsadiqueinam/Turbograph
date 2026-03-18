@@ -173,16 +173,16 @@ impl<O> Select<O> {
 
         let order = self.get_order_clause();
         if !order.is_empty() {
-            write!(q, "{order}").unwrap();
+            write!(q, "{order}").expect("write to String cannot fail");
         }
 
         let mut next_param = self.params.len() + 1;
         if self.limit.is_some() {
-            write!(q, " LIMIT ${next_param}").unwrap();
+            write!(q, " LIMIT ${next_param}").expect("write to String cannot fail");
             next_param += 1;
         }
         if self.offset.is_some() {
-            write!(q, " OFFSET ${next_param}").unwrap();
+            write!(q, " OFFSET ${next_param}").expect("write to String cannot fail");
         }
         q
     }

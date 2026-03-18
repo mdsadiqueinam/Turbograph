@@ -23,6 +23,9 @@ impl Op {
         }
     }
 
+    /// Returns the SQL operator string for simple binary comparisons.
+    /// Note: `In` is handled separately via `WhereBuilder::where_in()`, not as a binary operator.
+    /// This method will panic if called with `Op::In` to catch programming errors.
     pub fn sql_operator(self) -> &'static str {
         match self {
             Self::Eq => "=",
@@ -31,7 +34,7 @@ impl Op {
             Self::Gte => ">=",
             Self::Lt => "<",
             Self::Lte => "<=",
-            Self::In => unreachable!("IN is not a simple binary operator"),
+            Self::In => unreachable!("Op::In should be handled via WhereBuilder::where_in(), not sql_operator()"),
         }
     }
 
