@@ -154,26 +154,12 @@ ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
 -- USERS Policy
 -- Anyone can create, see. Only owner (id = app.current_user_id) can update/delete.
-CREATE POLICY users_policy ON public.users
-    FOR ALL
-    TO app_user
-    USING (true)
-    WITH CHECK (
-        id = current_setting('app.current_user_id', true)::integer
-    );
-
--- Separate SELECT policy for users if needed, but since USING(true) is for ALL, anyone can see.
--- Wait, FOR ALL with USING(true) means anyone can SELECT, but WITH CHECK only applies to INSERT/UPDATE.
--- However, for DELETE, only USING applies. So we need to be more specific.
-
-DROP POLICY IF EXISTS users_policy ON public.users;
-
 CREATE POLICY users_select_policy ON public.users FOR SELECT TO app_user USING (true);
 CREATE POLICY users_insert_policy ON public.users FOR INSERT TO app_user WITH CHECK (true);
-CREATE POLICY users_update_policy ON public.users FOR UPDATE TO app_user 
+CREATE POLICY users_update_policy ON public.users FOR UPDATE TO app_user
     USING (id = current_setting('app.current_user_id', true)::integer)
     WITH CHECK (id = current_setting('app.current_user_id', true)::integer);
-CREATE POLICY users_delete_policy ON public.users FOR DELETE TO app_user 
+CREATE POLICY users_delete_policy ON public.users FOR DELETE TO app_user
     USING (id = current_setting('app.current_user_id', true)::integer);
 
 -- POSTS Policy

@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use crate::TransactionConfig;
 use crate::db::JsonListExt;
 use crate::db::error::DbError;
-use crate::db::pool::PoolExt;
 use deadpool_postgres::Pool;
 use tokio_postgres::types::ToSql;
 
@@ -247,6 +246,7 @@ impl<O> Select<O> {
 mod tests {
     use super::*;
     use crate::db::operator::Op;
+    use crate::db::pool::PoolExt;
     use crate::db::where_clause::WhereBuilder;
 
     fn test_pool() -> Pool {
