@@ -9,11 +9,27 @@ use super::connection::{ConnectionPayload, EdgePayload};
 use crate::graphql::condition_type_ref;
 use crate::utils::inflection::{singularize, to_pascal_case, to_screaming_snake_case};
 
-/// Omit is used to determine which operations (create, read, update, delete) should be omitted for a given table or column based on its comment.
-/// The comment can contain an @omit annotation followed by a comma-separated list of operations to omit. For example:
-/// - `@omit read,update` would indicate that the read and update operations should be omitted for that table or column.
-/// - `@omit` without any operations would indicate that all operations
-/// from this struct false means it is not omitted, true means it is omitted
+/// Controls which CRUD operations should be generated for a table or column.
+///
+/// Turbograph reads the `@omit` annotation from PostgreSQL object comments.
+/// Adding it to a table or column comment will suppress the corresponding
+/// GraphQL field or mutation.
+///
+/// ## PostgreSQL comment syntax
+///
+/// ```sql
+/// -- Omit all operations for a table:
+/// COMMENT ON TABLE private_data IS '@omit';
+///
+/// -- Omit specific operations (comma-separated, no spaces):
+/// COMMENT ON TABLE audit_log IS '@omit create,update,delete';
+///
+/// -- Omit a column from reads:
+/// COMMENT ON COLUMN users.password_hash IS '@omit';
+/// ```
+///
+/// From this struct, `false` means the operation is **included**, `true` means
+/// it is **omitted**.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Omit {
     create: bool,
@@ -51,9 +67,13 @@ impl Omit {
     }
 }
 
+/// The kind of PostgreSQL relation that a [`Table`] represents.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Relkind {
+    /// A regular `r`elation — the most common case.
     Table,
+    /// A materialized view (`m`).  Write mutations (create, update, delete)
+    /// are automatically suppressed for materialized views.
     MaterializedView,
 }
 
@@ -69,6 +89,10 @@ impl Omit {
     }
 }
 
+/// Metadata for a single PostgreSQL column, obtained from `pg_catalog`.
+///
+/// Columns are owned by a [`Table`] and are used to generate both the
+/// GraphQL entity type and the input types for mutations.
 #[derive(Clone, Debug)]
 pub struct Column {
     id: u32,
@@ -105,38 +129,48 @@ impl Column {
         }
     }
 
+    /// OID of the table that owns this column.
     pub fn table_oid(&self) -> &u32 {
         &self.table_oid
     }
 
+    /// The column name as it appears in `pg_attribute.attname`.
     pub fn name(&self) -> &String {
         &self.name
     }
 
+    /// The PostgreSQL data type of this column.
     pub fn _type(&self) -> &Type {
         &self.r#type
     }
 
+    /// Returns `true` when `NOT NULL` is *not* set on this column.
     pub fn nullable(&self) -> bool {
         self.nullable
     }
 
+    /// Returns `true` when the `read` operation is suppressed for this column.
     pub fn omit_read(&self) -> bool {
         self.omit.read
     }
 
+    /// Returns `true` when the `create` operation is suppressed for this column.
     pub fn omit_create(&self) -> bool {
         self.omit.create
     }
 
+    /// Returns `true` when the `update` operation is suppressed for this column.
     pub fn omit_update(&self) -> bool {
         self.omit.update
     }
 
+    /// Returns `true` when the `delete` operation is suppressed for this column.
     pub fn omit_delete(&self) -> bool {
         self.omit.delete
     }
 
+    /// Returns `true` when the column has a `DEFAULT` expression, which means
+    /// it may be omitted from `CreateXxxInput`.
     pub fn has_default(&self) -> bool {
         self.has_default
     }
@@ -158,6 +192,11 @@ impl Column {
     }
 }
 
+/// Metadata for a single PostgreSQL table or materialized view, obtained from
+/// `pg_catalog`.
+///
+/// A `Table` aggregates its columns and exposes helper methods for generating
+/// the corresponding GraphQL types and input objects.
 #[derive(Clone, Debug)]
 pub struct Table {
     oid: u32,
@@ -201,62 +240,97 @@ impl Table {
         &self.columns
     }
 
+    /// The PostgreSQL object identifier (OID) of this table.
     pub fn oid(&self) -> &u32 {
         &self.oid
     }
 
+    /// The unquoted table name as it appears in `pg_class.relname`.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// The schema this table belongs to (e.g. `"public"`).
     pub fn schema_name(&self) -> &str {
         &self.schema_name
     }
 
+    /// The PascalCase, singularized GraphQL type name derived from the table name.
+    ///
+    /// For example, `blog_posts` becomes `BlogPost`.
     pub fn type_name(&self) -> String {
         to_pascal_case(&singularize(self.name()))
     }
 
+    /// Returns `true` when the `read` operation should be excluded from the schema.
     pub fn omit_read(&self) -> bool {
         self.omit.read
     }
 
+    /// Returns `true` when the `create` mutation should be excluded from the schema.
+    ///
+    /// Always `true` for materialized views.
     pub fn omit_create(&self) -> bool {
         self.omit.create || self.relkind == Relkind::MaterializedView
     }
 
+    /// Returns `true` when the `update` mutation should be excluded from the schema.
+    ///
+    /// Always `true` for materialized views.
     pub fn omit_update(&self) -> bool {
         self.omit.update || self.relkind == Relkind::MaterializedView
     }
 
+    /// Returns `true` when the `delete` mutation should be excluded from the schema.
+    ///
+    /// Always `true` for materialized views.
     pub fn omit_delete(&self) -> bool {
         self.omit.delete || self.relkind == Relkind::MaterializedView
     }
 
+    /// Name of the GraphQL `XxxCondition` input type used for filtering.
+    ///
+    /// For example, `User` → `UserCondition`.
     pub fn condition_type_name(&self) -> String {
         format!("{}Condition", self.type_name())
     }
 
+    /// Name of the GraphQL `XxxOrderBy` enum used for sorting.
+    ///
+    /// For example, `User` → `UserOrderBy`.
     pub fn order_by_enum_name(&self) -> String {
         format!("{}OrderBy", self.type_name())
     }
 
+    /// Name of the GraphQL `XxxConnection` type returned by list queries.
+    ///
+    /// For example, `User` → `UserConnection`.
     pub fn connection_type_name(&self) -> String {
         format!("{}Connection", self.type_name())
     }
 
+    /// Name of the GraphQL `XxxEdge` type used inside a connection.
+    ///
+    /// For example, `User` → `UserEdge`.
     pub fn edge_type_name(&self) -> String {
         format!("{}Edge", self.type_name())
     }
 
+    /// Name of the GraphQL `CreateXxxInput` mutation input type.
+    ///
+    /// For example, `User` → `CreateUserInput`.
     pub fn create_type_name(&self) -> String {
         format!("Create{}Input", self.type_name())
     }
 
+    /// Name of the GraphQL `UpdateXxxPatch` mutation input type.
+    ///
+    /// For example, `User` → `UpdateUserPatch`.
     pub fn update_type_name(&self) -> String {
         format!("Update{}Patch", self.type_name())
     }
 
+    /// Builds the GraphQL `XxxEdge` object type for this table.
     pub fn edge_type(&self) -> Object {
         let edge_type_name = self.edge_type_name();
         let node_type = self.type_name();
@@ -280,6 +354,9 @@ impl Table {
             }))
     }
 
+    /// Builds the GraphQL `XxxConnection` object type for this table.
+    ///
+    /// The connection exposes `totalCount`, `pageInfo`, `edges`, and `nodes`.
     pub fn connection_type(&self) -> Object {
         let type_name = self.type_name();
         let edge_type_name = self.edge_type_name();
@@ -347,6 +424,10 @@ impl Table {
         )
     }
 
+    /// Builds the GraphQL `XxxCondition` input type for this table.
+    ///
+    /// Each readable column becomes an optional field whose value is a
+    /// per-column filter input (e.g. `UserEmailFilter`).
     pub fn condition_type(&self) -> InputObject {
         self.columns().iter().filter(|c| !c.omit_read()).fold(
             InputObject::new(self.condition_type_name()),
@@ -364,6 +445,10 @@ impl Table {
         )
     }
 
+    /// Builds the GraphQL `CreateXxxInput` input type for this table.
+    ///
+    /// Non-nullable columns without a default value are required fields;
+    /// all others are optional.
     pub fn create_type(&self) -> InputObject {
         self.columns()
             .iter()
@@ -382,6 +467,9 @@ impl Table {
             })
     }
 
+    /// Builds the GraphQL `UpdateXxxPatch` input type for this table.
+    ///
+    /// All fields are optional so that callers can perform partial updates.
     pub fn update_type(&self) -> InputObject {
         self.columns()
             .iter()
@@ -395,6 +483,13 @@ impl Table {
             })
     }
 
+    /// Builds the per-column filter input type for `column` (e.g. `UserEmailFilter`).
+    ///
+    /// Returns `None` if the column type has no supported GraphQL mapping.
+    ///
+    /// All filter types expose `equal`, `notEqual`, and `in`.
+    /// Numeric and date/time columns additionally expose `greaterThan`,
+    /// `greaterThanEqual`, `lessThan`, and `lessThanEqual`.
     pub fn condition_filter_type(&self, column: &Column) -> Option<InputObject> {
         condition_type_ref(column).map(|tr| {
             let scalar_name = tr.to_string();
@@ -421,6 +516,7 @@ impl Table {
         })
     }
 
+    /// Returns all per-column filter input types for this table's readable columns.
     pub fn condition_filter_types(&self) -> Vec<InputObject> {
         self.columns()
             .iter()
@@ -429,6 +525,10 @@ impl Table {
             .collect()
     }
 
+    /// Builds the GraphQL `XxxOrderBy` enum for this table.
+    ///
+    /// Each readable column contributes two variants: `COLUMN_ASC` and
+    /// `COLUMN_DESC`.
     pub fn order_by_enum(&self) -> Enum {
         let name = self.order_by_enum_name();
         self.columns()
@@ -447,6 +547,12 @@ impl Table {
     }
 }
 
+/// Returns `true` when `column_type` supports range operators (`>`, `>=`,
+/// `<`, `<=`) in GraphQL filters.
+///
+/// Only numeric types and date/time types support range comparisons.
+/// Notably, `TIMETZ` is excluded because `tokio_postgres` does not provide a
+/// simple `ToSql` mapping for it.
 pub fn supports_range(column_type: &Type) -> bool {
     matches!(
         *column_type,

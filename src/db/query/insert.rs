@@ -15,6 +15,31 @@ use super::QueryBase;
 // ── Insert struct ─────────────────────────────────────────────────────────────
 // Insert does NOT implement SupportsWhere — no WHERE clause on inserts.
 
+/// SQL `INSERT INTO` query builder.
+///
+/// Create instances via [`PoolExt::insert`](crate::db::pool::PoolExt::insert).
+///
+/// Supports single and multi-row inserts.  Append `RETURNING *` with
+/// [`returning_all`](Insert::returning_all) and execute via
+/// [`execute_with_returning`](Insert::execute_with_returning) to get back the
+/// inserted rows.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use turbograph::db::pool::PoolExt;
+/// use turbograph::db::scalar::SqlScalar;
+/// use std::collections::HashMap;
+///
+/// # async fn example(pool: deadpool_postgres::Pool) -> Result<(), turbograph::DbError> {
+/// let mut q = pool.insert("users");
+/// let mut row = HashMap::new();
+/// row.insert("name".to_string(), Some(SqlScalar::Text("Alice".into())));
+/// row.insert("age".to_string(), Some(SqlScalar::Int4(30)));
+/// q.values(row).returning_all();
+/// let rows = q.execute_with_returning(None).await?;
+/// # Ok(()) }
+/// ```
 pub struct Insert {
     table: String,
     params: Vec<SqlScalar>,
@@ -74,6 +99,7 @@ impl Insert {
         self
     }
 
+    /// Returns all query parameters in row-major order as trait objects.
     pub fn all_params(&self) -> Vec<&(dyn ToSql + Sync)> {
         let mut params: Vec<&(dyn ToSql + Sync)> = Vec::new();
         for row in &self.values {
@@ -93,6 +119,7 @@ impl Insert {
         }
     }
 
+    /// Returns the full `INSERT INTO … VALUES …` SQL string.
     pub fn get_query(&self) -> String {
         let mut q = if self.values.is_empty() {
             format!("INSERT INTO {} DEFAULT VALUES", self.table)
@@ -132,6 +159,7 @@ impl Insert {
         q
     }
 
+    /// Execute the insert and return the number of rows affected.
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();

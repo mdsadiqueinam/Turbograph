@@ -6,7 +6,12 @@ use tokio_postgres::types::ToSql;
 use crate::db::error::DbError;
 use crate::models::transaction::TransactionConfig;
 
-/// Executes a query (INSERT, UPDATE, DELETE) within a transaction.
+/// Executes a DML statement (INSERT, UPDATE, DELETE) inside a transaction.
+///
+/// Opens a connection from `pool`, starts a `BEGIN` block (with any options
+/// encoded in `tx_config`), runs the query, and commits.  On error the
+/// transaction is rolled back.
+///
 /// Returns the number of affected rows.
 pub async fn execute_query(
     pool: &Pool,
@@ -46,8 +51,11 @@ pub async fn execute_query(
     result
 }
 
-/// Executes a query (INSERT, UPDATE, DELETE with RETURNING) within a transaction.
-/// Returns the rows from the RETURNING clause.
+/// Executes a DML statement with a `RETURNING *` clause inside a transaction.
+///
+/// Same transactional semantics as [`execute_query`], but uses
+/// `client.query()` instead of `client.execute()` and returns the resulting
+/// rows.  Used by mutations that need to return the affected record.
 pub async fn execute_query_with_returning(
     pool: &Pool,
     tx_config: &Option<TransactionConfig>,
@@ -86,6 +94,10 @@ pub async fn execute_query_with_returning(
     result
 }
 
+/// Builds the `BEGIN [ISOLATION LEVEL …] [READ ONLY] [DEFERRABLE]` SQL
+/// statement from the supplied [`TransactionConfig`].
+///
+/// When `tx_config` is `None`, returns the plain `"BEGIN"` string.
 pub(super) fn build_begin_statement(tx_config: &Option<TransactionConfig>) -> String {
     let mut begin = String::from("BEGIN");
     if let Some(cfg) = tx_config {

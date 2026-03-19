@@ -93,6 +93,18 @@ pub fn to_screaming_snake_case(text: &str) -> String {
     to_snake_case(text).to_uppercase()
 }
 
+/// Convert a plural English word to its singular form.
+///
+/// Uses the `pluralizer` crate's built-in English word list.
+///
+/// # Examples
+///
+/// ```
+/// use turbograph::utils::inflection::singularize;
+/// assert_eq!(singularize("countries"), "country");
+/// assert_eq!(singularize("users"), "user");
+/// assert_eq!(singularize("blog_posts"), "blog_post");
+/// ```
 pub fn singularize(text: &str) -> String {
     pluralizer::pluralize(text, 1, false)
 }

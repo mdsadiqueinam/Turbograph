@@ -22,6 +22,11 @@ fn generate_field(column: Arc<Column>) -> Field {
     )
 }
 
+/// Generates the `async_graphql` [`Object`] type for a database table.
+///
+/// Each readable column (those not marked with `@omit`) becomes a field on
+/// the resulting type.  The object is named after the singularised,
+/// PascalCase form of the table name (e.g. `blog_posts` → `BlogPost`).
 pub fn generate_entity(table: Arc<Table>) -> Object {
     let type_name = table.type_name();
     let obj = Object::new(type_name.as_str());

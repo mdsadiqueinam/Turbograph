@@ -1,3 +1,6 @@
+//! Database layer: introspection, query builders, transaction helpers, and
+//! the optional DDL-watch background task.
+
 pub mod error;
 pub mod introspect;
 pub(crate) mod operator;

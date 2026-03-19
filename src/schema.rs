@@ -63,6 +63,21 @@ impl TurboGraph {
     }
 
     /// Execute a GraphQL request against the current schema.
+    ///
+    /// When `watch_pg` is enabled the schema is read from a shared
+    /// [`RwLock`](tokio::sync::RwLock), ensuring callers always see the latest
+    /// version without blocking on in-progress rebuilds.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use turbograph::TurboGraph;
+    /// # async fn example(graph: TurboGraph) {
+    /// let request = async_graphql::Request::new("{ __typename }");
+    /// let response = graph.execute(request).await;
+    /// println!("{}", serde_json::to_string(&response).unwrap());
+    /// # }
+    /// ```
     pub async fn execute(&self, request: async_graphql::Request) -> async_graphql::Response {
         // SAFETY: The schema is only swapped out in its entirety after a fresh build completes,
         // so there are no concerns about concurrent mutation. Readers will always see a consistent schema,
@@ -72,22 +87,39 @@ impl TurboGraph {
     }
 
     /// Returns the GraphiQL HTML page pointing at the given `endpoint`.
+    ///
+    /// Serve this string from a `GET` handler alongside the `POST` GraphQL
+    /// endpoint to provide an in-browser IDE.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use turbograph::TurboGraph;
+    /// let html = TurboGraph::graphiql("/graphql");
+    /// assert!(html.contains("GraphiQL"));
+    /// ```
     pub fn graphiql(endpoint: &str) -> String {
         async_graphql::http::GraphiQLSource::build()
             .endpoint(endpoint)
             .finish()
     }
 
-    /// Returns a clone of the current underlying dynamic schema.
+    /// Returns a clone of the current underlying `async_graphql` dynamic schema.
+    ///
+    /// Useful when you need to inspect the schema introspectively (e.g. for
+    /// custom SDL generation).
     pub async fn schema(&self) -> Schema {
         self.schema.read().await.clone()
     }
 }
 
-/// Builds a schema from the current database state.
+/// Builds a complete `async_graphql` schema from the current database state.
 ///
-/// Used for the initial build and for automatic rebuilds triggered by DDL
-/// changes.
+/// Introspects every table in `schemas`, generates the entity, query, and
+/// mutation types, and compiles them into a [`Schema`] ready for execution.
+///
+/// This function is called once at startup (via [`TurboGraph::new`]) and again
+/// automatically whenever `watch_pg` detects a DDL change.
 pub(crate) async fn rebuild_schema(
     pool: &Arc<Pool>,
     schemas: &[String],

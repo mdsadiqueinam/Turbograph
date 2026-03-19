@@ -1,11 +1,21 @@
 use serde_json::{Map, Value};
 use tokio_postgres::{Row, types::Type};
 
+/// Extension trait for converting a single `tokio_postgres::Row` to a
+/// [`serde_json::Value`].
+///
+/// Each column is converted based on its PostgreSQL type.  Unsupported types
+/// fall back to their string representation; `NULL` values become
+/// `Value::Null`.
 pub trait JsonExt {
+    /// Convert `self` into a JSON object (`Value::Object`) keyed by column name.
     fn to_json(&self) -> Value;
 }
 
+/// Extension trait for converting a `Vec<tokio_postgres::Row>` to a
+/// `Vec<serde_json::Value>`.
 pub trait JsonListExt {
+    /// Convert each row in `self` to a JSON value using [`JsonExt::to_json`].
     fn to_json_list(&self) -> Vec<Value>;
 }
 

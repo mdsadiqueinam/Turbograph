@@ -1,14 +1,73 @@
 use super::operator::Op;
 use super::scalar::{SqlArray, SqlScalar};
 
-/// The Public API
+/// Public API for building SQL `WHERE` clauses incrementally.
+///
+/// Methods append conditions to the query using `AND` by default.  Use the
+/// `or_` variants to append with `OR`.  Conditions can be grouped into
+/// sub-expressions with [`where_block`](Self::where_block) /
+/// [`or_where_block`](Self::or_where_block).
+///
+/// This trait is implemented for any type that also implements the internal
+/// [`WhereInternal`] trait — in practice that means [`Select<NoOrder>`],
+/// [`Update`], and [`Delete`].
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use turbograph::db::pool::PoolExt;
+/// use turbograph::db::operator::Op;
+/// use turbograph::db::scalar::SqlScalar;
+/// use turbograph::db::where_clause::WhereBuilder;
+///
+/// # fn example(pool: deadpool_postgres::Pool) {
+/// let mut q = pool.select("users");
+/// // WHERE active = $1 AND age > $2
+/// q.where_clause("active", Op::Eq, Some(SqlScalar::Bool(true)));
+/// q.where_clause("age", Op::Gt, Some(SqlScalar::Int4(18)));
+/// # }
+/// ```
 pub trait WhereBuilder {
+    /// Append an `AND column op $n` condition.
+    ///
+    /// When `scalar` is `None`, the condition becomes `column IS NULL`
+    /// (no parameter is added).
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
+
+    /// Append an `OR column op $n` condition.
+    ///
+    /// When `scalar` is `None`, the condition becomes `OR column IS NULL`.
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
+
+    /// Append an `AND column = ANY($n)` condition for an array of values.
     fn where_in(&mut self, column: &str, scalars: SqlArray) -> &mut Self;
+
+    /// Append a grouped `AND (...)` sub-expression.
+    ///
+    /// Conditions built inside `block` are wrapped in parentheses and joined
+    /// to the outer clause with `AND`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use turbograph::db::pool::PoolExt;
+    /// # use turbograph::db::operator::Op;
+    /// # use turbograph::db::scalar::SqlScalar;
+    /// # use turbograph::db::where_clause::WhereBuilder;
+    /// # fn example(pool: deadpool_postgres::Pool) {
+    /// let mut q = pool.select("products");
+    /// // WHERE (price > $1 OR price < $2)
+    /// q.where_block(|q| {
+    ///     q.where_clause("price", Op::Gt, Some(SqlScalar::Int4(100)));
+    ///     q.or_where_clause("price", Op::Lt, Some(SqlScalar::Int4(10)));
+    /// });
+    /// # }
+    /// ```
     fn where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);
+
+    /// Append a grouped `OR (...)` sub-expression.
     fn or_where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);

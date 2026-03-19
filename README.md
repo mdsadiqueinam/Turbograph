@@ -14,8 +14,17 @@ Turbograph introspects your PostgreSQL schema and builds an `async-graphql` sche
 
 ## Installation
 
+Add the crate to your project:
+
 ```bash
 cargo add turbograph
+```
+
+Or add it manually to `Cargo.toml`:
+
+```toml
+[dependencies]
+turbograph = "0.1"
 ```
 
 ## Quick Start (Example Server)
@@ -44,45 +53,195 @@ The sample database schema and seed data are in `db/init.sql`.
 
 ## Library Usage
 
+### Minimal setup
+
 ```rust
 use turbograph::{Config, PoolConfig, TurboGraph};
 
 #[tokio::main]
-async fn main() {
-	let schema = TurboGraph::new(Config {
-		pool: PoolConfig::ConnectionString(
-			"postgres://postgres:Aa123456@localhost:5432/app-db".into(),
-		),
-		schemas: vec!["public".into()],
-		watch_pg: true,
-	})
-	.await
-	.expect("failed to build schema");
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let graph = TurboGraph::new(Config {
+        pool: PoolConfig::ConnectionString(
+            "postgres://postgres:secret@localhost:5432/mydb".into(),
+        ),
+        schemas: vec!["public".into()],
+        watch_pg: false,
+    })
+    .await?;
 
-	// Execute GraphQL requests with your transport/framework of choice.
-	let _ = schema;
+    // Execute a raw GraphQL request
+    let response = graph
+        .execute(async_graphql::Request::new("{ __typename }"))
+        .await;
+    println!("{:?}", response);
+    Ok(())
 }
 ```
 
-For a complete HTTP integration with Axum and GraphiQL, see `examples/server/src/main.rs`.
+### Integration with Axum
+
+```rust,no_run
+use axum::{Router, extract::State, response::{Html, IntoResponse}, routing::get};
+use turbograph::{Config, PoolConfig, TurboGraph};
+
+async fn graphiql() -> Html<String> {
+    Html(TurboGraph::graphiql("/graphql"))
+}
+
+async fn graphql_handler(
+    State(graph): State<TurboGraph>,
+    req: axum::extract::Json<async_graphql::Request>,
+) -> axum::response::Json<async_graphql::Response> {
+    axum::response::Json(graph.execute(req.0).await)
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let graph = TurboGraph::new(Config {
+        pool: PoolConfig::ConnectionString(
+            "postgres://postgres:secret@localhost:5432/mydb".into(),
+        ),
+        schemas: vec!["public".into()],
+        watch_pg: true, // rebuild schema on DDL changes
+    })
+    .await?;
+
+    let app = Router::new()
+        .route("/graphql", get(graphiql).post(graphql_handler))
+        .with_state(graph);
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000").await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+```
+
+## Generated GraphQL API
+
+For every table or view that Turbograph discovers it generates:
+
+### Queries
+
+```graphql
+# List all rows with optional filtering, ordering, and pagination.
+allUsers(
+  condition: UserCondition   # per-column filter
+  orderBy:   [UserOrderBy!]  # e.g. [ID_DESC, NAME_ASC]
+  first:     Int             # LIMIT
+  offset:    Int             # OFFSET
+): UserConnection!
+
+# UserConnection exposes pagination metadata and the rows themselves.
+type UserConnection {
+  totalCount:    Int!
+  pageInfo:      PageInfo!
+  edges:         [UserEdge!]!
+  nodes:         [User!]!
+}
+
+type PageInfo {
+  hasNextPage:     Boolean!
+  hasPreviousPage: Boolean!
+  startCursor:     String
+  endCursor:       String
+}
+```
+
+### Mutations
+
+```graphql
+# Insert a single row.
+createUser(input: CreateUserInput!): User
+
+# Update rows matching the condition.
+updateUser(patch: UpdateUserPatch!, condition: UserCondition): [User!]!
+
+# Delete rows matching the condition.
+deleteUser(condition: UserCondition): [User!]!
+```
+
+### Filtering
+
+```graphql
+query {
+  allUsers(
+    condition: {
+      email: { equal: "alice@example.com" }
+      age:   { greaterThanEqual: 18 }
+    }
+    orderBy: [CREATED_AT_DESC]
+    first: 10
+    offset: 0
+  ) {
+    totalCount
+    nodes { id name email }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+```
+
+Every column filter supports `equal`, `notEqual`, and `in`.
+Numeric and date/time columns also support `greaterThan`, `greaterThanEqual`,
+`lessThan`, and `lessThanEqual`.
+
+## Controlling Generated Fields with `@omit`
+
+Add `@omit` to a PostgreSQL object comment to suppress specific operations:
+
+```sql
+-- Hide all operations on a table (e.g. internal/audit tables).
+COMMENT ON TABLE audit_log IS '@omit';
+
+-- Suppress only write mutations; the table is still queryable.
+COMMENT ON TABLE view_only IS '@omit create,update,delete';
+
+-- Hide a column from the API (e.g. a password hash).
+COMMENT ON COLUMN users.password_hash IS '@omit';
+```
+
+Materialized views automatically suppress create, update, and delete.
 
 ## Request Transaction Context
 
 Turbograph supports per-request transaction settings via `TransactionConfig`.
-This is useful for row-level security (RLS), role switching, and session-like values.
+This is useful for row-level security (RLS), role switching, and session-like
+values forwarded to PostgreSQL functions.
 
 ```rust
 use turbograph::TransactionConfig;
 
 let tx_config = TransactionConfig {
-	isolation_level: None,
-	read_only: false,
-	deferrable: false,
-	role: Some("app_user".into()),
-	timeout_seconds: None,
-	settings: vec![("app.current_user_id".into(), "1".into())],
+    role: Some("app_user".into()),
+    settings: vec![
+        ("app.current_user_id".into(), "42".into()),
+        ("app.tenant_id".into(), "acme".into()),
+    ],
+    read_only: false,
+    deferrable: false,
+    isolation_level: None,
+    timeout_seconds: Some(5),
 };
 ```
+
+Inject it into the GraphQL request so Turbograph picks it up automatically:
+
+```rust,no_run
+use turbograph::{TransactionConfig, TurboGraph};
+
+async fn handle(graph: &TurboGraph, query: &str, user_id: i64) {
+    let tx = TransactionConfig {
+        role: Some("app_user".into()),
+        settings: vec![("app.current_user_id".into(), user_id.to_string())],
+        ..TransactionConfig::default()
+    };
+    let request = async_graphql::Request::new(query).data(tx);
+    let response = graph.execute(request).await;
+    println!("{:?}", response);
+}
+```
+
+Any PostgreSQL row-level security policy that reads `current_setting('app.current_user_id')`
+will automatically see the value you set.
 
 ## Release Process
 
