@@ -33,10 +33,9 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
     let field_name = format!("all{}", to_pascal_case(table.name()));
     let tbl_schema = table.schema_name().to_string();
     let tbl_name = table.name().to_string();
-
     let columns = Arc::new(table.columns().to_vec());
 
-    let query_field = Field::new(
+    Field::new(
         field_name,
         TypeRef::named_nn(table.connection_type_name()),
         move |ctx| {
@@ -132,7 +131,5 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
         TypeRef::named_list(table.order_by_enum_name()),
     ))
     .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
-    .argument(InputValue::new("offset", TypeRef::named(TypeRef::INT)));
-
-    query_field
+    .argument(InputValue::new("offset", TypeRef::named(TypeRef::INT)))
 }
