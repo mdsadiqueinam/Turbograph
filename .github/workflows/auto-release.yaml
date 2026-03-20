@@ -72,20 +72,23 @@ jobs:
                  "description": "release notes with \\n for newlines"
                }
 
-      # ── Step 3: Parse Claude output ────────────────────────────────────────
+      # ── Step 3: Parse Claude output from execution file ───────────────────
       - name: Parse version and description
         id: parse
-        env:
-          CLAUDE_OUTPUT: ${{ steps.claude.outputs.result }}
         run: |
-          echo "=== Raw Claude output ==="
+          EXECUTION_FILE="/home/runner/work/_temp/claude-execution-output.json"
+
+          echo "=== Claude execution file ==="
+          cat "$EXECUTION_FILE"
+
+          # The file contains multiple newline-delimited JSON objects, find the result one
+          CLAUDE_OUTPUT=$(grep -o '"result":"[^"]*"' "$EXECUTION_FILE" | tail -1 | sed 's/"result":"//;s/"$//' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+
+          echo "=== Parsed Claude output ==="
           echo "$CLAUDE_OUTPUT"
 
-          # Extract the JSON object from the output
-          JSON=$(echo "$CLAUDE_OUTPUT" | grep -o '{.*}' | tail -1)
-
-          VERSION=$(echo "$JSON" | jq -r '.version')
-          DESCRIPTION=$(echo "$JSON" | jq -r '.description')
+          VERSION=$(echo "$CLAUDE_OUTPUT" | jq -r '.version')
+          DESCRIPTION=$(echo "$CLAUDE_OUTPUT" | jq -r '.description')
 
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
             echo "❌ Could not parse version from Claude output"
