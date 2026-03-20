@@ -42,7 +42,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          show_full_output: true
           claude_args: --allowedTools ""
           prompt: |
             You are a release manager for a software project.
@@ -77,7 +76,7 @@ jobs:
       - name: Parse version and description
         id: parse
         env:
-          CLAUDE_OUTPUT: ${{ steps.claude.outputs.full_output }}
+          CLAUDE_OUTPUT: ${{ steps.claude.outputs.result }}
         run: |
           echo "=== Raw Claude output ==="
           echo "$CLAUDE_OUTPUT"
