@@ -18,78 +18,101 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Step 1: Generate description & new version via Claude ──────────────
-      - name: Generate Release Notes and Version
-        id: claude_release
+      # ── Step 1: Gather git info ────────────────────────────────────────────
+      - name: Gather git info
+        id: git_info
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+
+          if [ -z "$LAST_TAG" ]; then
+            LOG=$(git log --pretty=format:"%s")
+          else
+            LOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"%s")
+          fi
+
+          # Store multiline log safely
+          EOF=$(openssl rand -hex 8)
+          echo "commits<<$EOF"  >> $GITHUB_OUTPUT
+          echo "$LOG"           >> $GITHUB_OUTPUT
+          echo "$EOF"           >> $GITHUB_OUTPUT
+
+      # ── Step 2: Generate version and release notes via Claude ──────────────
+      - name: Generate version and release notes
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          verbose: true 
+          allowed_tools: "Bash(echo *),Bash(tee *),Bash(cat *),Bash(python3 *)"
           prompt: |
-            REPO: ${{ github.repository }}
+            You are a release manager for a software project.
 
-            Your task is to analyze the git history since the last release tag and
-            produce a new semantic version + a release description.
+            Last release tag: ${{ steps.git_info.outputs.last_tag || 'none (first release)' }}
+            Commits since last release:
+            ${{ steps.git_info.outputs.commits }}
 
-            Steps you MUST follow:
+            ## Your task:
 
-            1. Run `gh release list --limit 1` to find the latest release tag.
-               If there are no releases yet, treat the initial commit as the baseline.
+            1. Determine the next semantic version (MAJOR.MINOR.PATCH):
+               - feat!: / BREAKING CHANGE → bump MAJOR (no previous tag → start at 1.0.0)
+               - feat:                    → bump MINOR (no previous tag → start at 0.1.0)
+               - fix: / chore: / etc.     → bump PATCH (no previous tag → start at 0.0.1)
 
-            2. Run `gh api repos/${{ github.repository }}/compare/{last_tag}...HEAD`
-               (or `git log {last_tag}..HEAD --oneline`) to list all commits since
-               the last release.
+            2. Write release notes in Markdown using these categories (omit empty ones):
+               ### Added
+               ### Changed
+               ### Fixed
+               ### Breaking Changes
+               ### Full Changelog
+               `${{ steps.git_info.outputs.last_tag || 'initial' }}...v{new_version}`
 
-            3. Determine the next semantic version (MAJOR.MINOR.PATCH) following
-               Conventional Commits rules:
-               - feat!: / BREAKING CHANGE → bump MAJOR
-               - feat:                    → bump MINOR
-               - fix: / chore: / etc.     → bump PATCH
-
-            4. Write a clean Markdown release description with sections:
-               ## What's Changed
-               - bullet list of notable changes
-               ## Bug Fixes        (if any)
-               ## Breaking Changes (if any)
-               ## Full Changelog
-               `{last_tag}...v{new_version}`
-
-            5. Output ONLY a JSON object (no markdown fences, no extra text):
-               {
-                 "version": "X.Y.Z",
-                 "description": "<escaped markdown string>"
+            3. Write the result to /tmp/release_output.json using this exact command:
+               python3 -c "
+               import json
+               data = {
+                 'version': 'X.Y.Z',
+                 'description': '''your markdown here'''
                }
-          claude_args: |
-            --allowedTools "Bash(git log:*),Bash(git tag:*),Bash(gh release list:*),Bash(gh api:*)"
+               with open('/tmp/release_output.json', 'w') as f:
+                   json.dump(data, f)
+               "
 
-      # ── Step 2: Parse Claude output ────────────────────────────────────────
+               Replace X.Y.Z and the description with the actual values.
+               The file must contain valid JSON with exactly two keys: version and description.
+
+      # ── Step 3: Parse Claude output ────────────────────────────────────────
       - name: Parse version and description
         id: parse
         run: |
-          OUTPUT="${{ steps.claude_release.outputs.result }}"
-
-          VERSION=$(echo "$OUTPUT" | jq -r '.version')
-          DESCRIPTION=$(echo "$OUTPUT" | jq -r '.description')
-
-          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
-            echo "❌ Could not parse version from Claude output"
+          if [[ ! -f /tmp/release_output.json ]]; then
+            echo "❌ /tmp/release_output.json not found"
             exit 1
           fi
 
-          echo "version=$VERSION"             >> "$GITHUB_OUTPUT"
-          # Store multiline description safely
+          echo "=== Claude output ==="
+          cat /tmp/release_output.json
+
+          VERSION=$(jq -r '.version' /tmp/release_output.json)
+          DESCRIPTION=$(jq -r '.description' /tmp/release_output.json)
+
+          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            echo "❌ Could not parse version"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
           EOF=$(openssl rand -hex 8)
-          echo "description<<$EOF"            >> "$GITHUB_OUTPUT"
-          echo "$DESCRIPTION"                 >> "$GITHUB_OUTPUT"
-          echo "$EOF"                         >> "$GITHUB_OUTPUT"
+          echo "description<<$EOF"  >> "$GITHUB_OUTPUT"
+          echo "$DESCRIPTION"       >> "$GITHUB_OUTPUT"
+          echo "$EOF"               >> "$GITHUB_OUTPUT"
 
           echo "✅ New version: $VERSION"
 
-      # ── Step 3: Bump version in Cargo.toml ────────────────────────────────
+      # ── Step 4: Bump version in Cargo.toml ────────────────────────────────
       - name: Update version in Cargo.toml
         run: |
           NEW_VERSION="${{ steps.parse.outputs.version }}"
-          # Replace the first `version = "..."` line in [package]
           sed -i "0,/^version = \".*\"/{s/^version = \".*\"/version = \"$NEW_VERSION\"/}" Cargo.toml
 
           echo "--- Updated Cargo.toml snippet ---"
@@ -103,17 +126,16 @@ jobs:
           git commit -m "chore: bump version to v${{ steps.parse.outputs.version }} [skip ci]"
           git push
 
-      # ── Step 4: Create draft GitHub release ───────────────────────────────
+      # ── Step 5: Create draft GitHub release ───────────────────────────────
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="v${{ steps.parse.outputs.version }}"
-          DESCRIPTION="${{ steps.parse.outputs.description }}"
 
           gh release create "$VERSION" \
             --title "Release $VERSION" \
-            --notes "$DESCRIPTION" \
+            --notes "${{ steps.parse.outputs.description }}" \
             --draft \
             --target main
 
