@@ -268,7 +268,7 @@ Planned improvements include broader PostgreSQL feature coverage, richer filteri
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 
