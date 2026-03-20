@@ -81,14 +81,9 @@ jobs:
           echo "=== Claude execution file ==="
           cat "$EXECUTION_FILE"
 
-          # Parse as JSON array and find the entry with type == "result"
-          CLAUDE_OUTPUT=$(jq -r '.[] | select(.type == "result") | .result' "$EXECUTION_FILE")
-
-          echo "=== Parsed Claude output ==="
-          echo "$CLAUDE_OUTPUT"
-
-          VERSION=$(echo "$CLAUDE_OUTPUT" | jq -r '.version')
-          DESCRIPTION=$(echo "$CLAUDE_OUTPUT" | jq -r '.description')
+          # Parse as JSON array, find type=result, then parse .result string as JSON
+          VERSION=$(jq -r '.[] | select(.type == "result") | .result | fromjson | .version' "$EXECUTION_FILE")
+          DESCRIPTION=$(jq -r '.[] | select(.type == "result") | .result | fromjson | .description' "$EXECUTION_FILE")
 
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
             echo "❌ Could not parse version from Claude output"
