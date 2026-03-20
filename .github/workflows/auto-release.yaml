@@ -1,0 +1,119 @@
+name: Auto Release on Main
+
+on:
+  workflow_dispatch:
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Step 1: Generate description & new version via Claude ──────────────
+      - name: Generate Release Notes and Version
+        id: claude_release
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            REPO: ${{ github.repository }}
+
+            Your task is to analyze the git history since the last release tag and
+            produce a new semantic version + a release description.
+
+            Steps you MUST follow:
+
+            1. Run `gh release list --limit 1` to find the latest release tag.
+               If there are no releases yet, treat the initial commit as the baseline.
+
+            2. Run `gh api repos/${{ github.repository }}/compare/{last_tag}...HEAD`
+               (or `git log {last_tag}..HEAD --oneline`) to list all commits since
+               the last release.
+
+            3. Determine the next semantic version (MAJOR.MINOR.PATCH) following
+               Conventional Commits rules:
+               - feat!: / BREAKING CHANGE → bump MAJOR
+               - feat:                    → bump MINOR
+               - fix: / chore: / etc.     → bump PATCH
+
+            4. Write a clean Markdown release description with sections:
+               ## What's Changed
+               - bullet list of notable changes
+               ## Bug Fixes        (if any)
+               ## Breaking Changes (if any)
+               ## Full Changelog
+               `{last_tag}...v{new_version}`
+
+            5. Output ONLY a JSON object (no markdown fences, no extra text):
+               {
+                 "version": "X.Y.Z",
+                 "description": "<escaped markdown string>"
+               }
+          claude_args: |
+            --allowedTools "Bash(git log:*),Bash(git tag:*),Bash(gh release list:*),Bash(gh api:*)"
+
+      # ── Step 2: Parse Claude output ────────────────────────────────────────
+      - name: Parse version and description
+        id: parse
+        run: |
+          OUTPUT='${{ steps.claude_release.outputs.result }}'
+
+          VERSION=$(echo "$OUTPUT" | jq -r '.version')
+          DESCRIPTION=$(echo "$OUTPUT" | jq -r '.description')
+
+          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            echo "❌ Could not parse version from Claude output"
+            exit 1
+          fi
+
+          echo "version=$VERSION"             >> "$GITHUB_OUTPUT"
+          # Store multiline description safely
+          EOF=$(openssl rand -hex 8)
+          echo "description<<$EOF"            >> "$GITHUB_OUTPUT"
+          echo "$DESCRIPTION"                 >> "$GITHUB_OUTPUT"
+          echo "$EOF"                         >> "$GITHUB_OUTPUT"
+
+          echo "✅ New version: $VERSION"
+
+      # ── Step 3: Bump version in Cargo.toml ────────────────────────────────
+      - name: Update version in Cargo.toml
+        run: |
+          NEW_VERSION="${{ steps.parse.outputs.version }}"
+          # Replace the first `version = "..."` line in [package]
+          sed -i "0,/^version = \".*\"/{s/^version = \".*\"/version = \"$NEW_VERSION\"/}" Cargo.toml
+
+          echo "--- Updated Cargo.toml snippet ---"
+          grep '^version' Cargo.toml | head -5
+
+      - name: Commit updated Cargo.toml
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml
+          git commit -m "chore: bump version to v${{ steps.parse.outputs.version }} [skip ci]"
+          git push
+
+      # ── Step 4: Create draft GitHub release ───────────────────────────────
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ steps.parse.outputs.version }}"
+          DESCRIPTION="${{ steps.parse.outputs.description }}"
+
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes "$DESCRIPTION" \
+            --draft \
+            --target main
+
+          echo "✅ Draft release $VERSION created."
