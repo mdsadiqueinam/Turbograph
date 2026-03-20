@@ -65,7 +65,7 @@ jobs:
       - name: Parse version and description
         id: parse
         run: |
-          OUTPUT='${{ steps.claude_release.outputs.result }}'
+          OUTPUT="${{ steps.claude_release.outputs.result }}"
 
           VERSION=$(echo "$OUTPUT" | jq -r '.version')
           DESCRIPTION=$(echo "$OUTPUT" | jq -r '.description')
