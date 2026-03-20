@@ -78,9 +78,6 @@ jobs:
         run: |
           EXECUTION_FILE="/home/runner/work/_temp/claude-execution-output.json"
 
-          echo "=== Claude execution file ==="
-          cat "$EXECUTION_FILE"
-
           # Parse as JSON array and find the entry with type == "result"
           CLAUDE_OUTPUT=$(jq -r '.[] | select(.type == "result") | .result' "$EXECUTION_FILE")
 
@@ -117,9 +114,25 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+      
           git add Cargo.toml
+      
+          # Check if anything actually changed
+          if git diff --cached --quiet; then
+            echo "ℹ️ No changes to commit"
+            exit 0
+          fi
+      
           git commit -m "chore: bump version to v${{ steps.parse.outputs.version }} [skip ci]"
-          git push
+      
+          # Ensure we're on main (not detached HEAD)
+          git branch --show-current || git checkout main
+      
+          # Pull latest changes to avoid rejection
+          git pull --rebase origin main
+      
+          # Push safely
+          git push origin main
 
       # ── Step 5: Create draft GitHub release ───────────────────────────────
       - name: Create draft release
