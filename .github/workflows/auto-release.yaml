@@ -42,7 +42,8 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: ""
+          show_full_output: true
+          claude_args: --allowedTools ""
           prompt: |
             You are a release manager for a software project.
 
@@ -76,13 +77,16 @@ jobs:
       - name: Parse version and description
         id: parse
         env:
-          CLAUDE_OUTPUT: ${{ steps.claude.outputs.result }}
+          CLAUDE_OUTPUT: ${{ steps.claude.outputs.full_output }}
         run: |
           echo "=== Raw Claude output ==="
           echo "$CLAUDE_OUTPUT"
 
-          VERSION=$(echo "$CLAUDE_OUTPUT" | jq -r '.version')
-          DESCRIPTION=$(echo "$CLAUDE_OUTPUT" | jq -r '.description')
+          # Extract the JSON object from the output
+          JSON=$(echo "$CLAUDE_OUTPUT" | grep -o '{.*}' | tail -1)
+
+          VERSION=$(echo "$JSON" | jq -r '.version')
+          DESCRIPTION=$(echo "$JSON" | jq -r '.description')
 
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
             echo "❌ Could not parse version from Claude output"
