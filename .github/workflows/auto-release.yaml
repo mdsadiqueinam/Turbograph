@@ -81,8 +81,8 @@ jobs:
           echo "=== Claude execution file ==="
           cat "$EXECUTION_FILE"
 
-          # The file contains multiple newline-delimited JSON objects, find the result one
-          CLAUDE_OUTPUT=$(grep -o '"result":"[^"]*"' "$EXECUTION_FILE" | tail -1 | sed 's/"result":"//;s/"$//' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+          # Parse as JSON array and find the entry with type == "result"
+          CLAUDE_OUTPUT=$(jq -r '.[] | select(.type == "result") | .result' "$EXECUTION_FILE")
 
           echo "=== Parsed Claude output ==="
           echo "$CLAUDE_OUTPUT"
