@@ -77,6 +77,9 @@ jobs:
         id: parse
         run: |
           EXECUTION_FILE="/home/runner/work/_temp/claude-execution-output.json"
+ 
+          echo "=== Claude execution file ==="
+          cat "$EXECUTION_FILE"
 
           # Parse as JSON array and find the entry with type == "result"
           CLAUDE_OUTPUT=$(jq -r '.[] | select(.type == "result") | .result' "$EXECUTION_FILE")
