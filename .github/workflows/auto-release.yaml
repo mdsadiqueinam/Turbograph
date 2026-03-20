@@ -31,19 +31,18 @@ jobs:
             LOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"%s")
           fi
 
-          # Store multiline log safely
           EOF=$(openssl rand -hex 8)
           echo "commits<<$EOF"  >> $GITHUB_OUTPUT
           echo "$LOG"           >> $GITHUB_OUTPUT
           echo "$EOF"           >> $GITHUB_OUTPUT
 
-      # ── Step 2: Generate version and release notes via Claude ──────────────
+      # ── Step 2: Claude generates structured JSON output ───────────────────
       - name: Generate version and release notes
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: "Bash(echo *),Bash(tee *),Bash(cat *),Bash(python3 *)"
+          allowed_tools: ""
           prompt: |
             You are a release manager for a software project.
 
@@ -66,37 +65,27 @@ jobs:
                ### Full Changelog
                `${{ steps.git_info.outputs.last_tag || 'initial' }}...v{new_version}`
 
-            3. Write the result to /tmp/release_output.json using this exact command:
-               python3 -c "
-               import json
-               data = {
-                 'version': 'X.Y.Z',
-                 'description': '''your markdown here'''
+            3. Respond with ONLY a raw JSON object — no markdown fences, no explanation,
+               no extra text before or after. The JSON must have exactly two keys:
+               {
+                 "version": "X.Y.Z",
+                 "description": "release notes with \\n for newlines"
                }
-               with open('/tmp/release_output.json', 'w') as f:
-                   json.dump(data, f)
-               "
-
-               Replace X.Y.Z and the description with the actual values.
-               The file must contain valid JSON with exactly two keys: version and description.
 
       # ── Step 3: Parse Claude output ────────────────────────────────────────
       - name: Parse version and description
         id: parse
+        env:
+          CLAUDE_OUTPUT: ${{ steps.claude.outputs.result }}
         run: |
-          if [[ ! -f /tmp/release_output.json ]]; then
-            echo "❌ /tmp/release_output.json not found"
-            exit 1
-          fi
+          echo "=== Raw Claude output ==="
+          echo "$CLAUDE_OUTPUT"
 
-          echo "=== Claude output ==="
-          cat /tmp/release_output.json
-
-          VERSION=$(jq -r '.version' /tmp/release_output.json)
-          DESCRIPTION=$(jq -r '.description' /tmp/release_output.json)
+          VERSION=$(echo "$CLAUDE_OUTPUT" | jq -r '.version')
+          DESCRIPTION=$(echo "$CLAUDE_OUTPUT" | jq -r '.description')
 
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
-            echo "❌ Could not parse version"
+            echo "❌ Could not parse version from Claude output"
             exit 1
           fi
 
@@ -130,12 +119,13 @@ jobs:
       - name: Create draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DESCRIPTION: ${{ steps.parse.outputs.description }}
         run: |
           VERSION="v${{ steps.parse.outputs.version }}"
 
           gh release create "$VERSION" \
             --title "Release $VERSION" \
-            --notes "${{ steps.parse.outputs.description }}" \
+            --notes "$DESCRIPTION" \
             --draft \
             --target main
 
