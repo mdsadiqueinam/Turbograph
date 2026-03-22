@@ -25,7 +25,7 @@ jobs:
         run: |
           TAG_VERSION="${{ github.event.release.tag_name }}"
           TAG_VERSION="${TAG_VERSION#v}"
-          CRATE_VERSION="$(cargo pkgid --package turbograph | sed -E 's/.*@//')"
+          CRATE_VERSION=$(grep '^version' Cargo.toml | head -n1 | cut -d '"' -f2)
 
           if [ "$TAG_VERSION" != "$CRATE_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) does not match crate version ($CRATE_VERSION)."
