@@ -55,6 +55,25 @@ pub struct WatchPg(pub String);
 ///     watch_pg: Some(WatchPg("postgres://user:pass@localhost:5432/mydb".into())),
 /// };
 /// ```
+///
+/// # Example with pre-built pool
+///
+/// ```rust,no_run
+/// use turbograph::{Config, PoolConfig, WatchPg};
+/// use deadpool_postgres::{Config as PoolCfg, Runtime};
+///
+/// let mut pg_cfg = PoolCfg::new();
+/// pg_cfg.url = Some("postgres://user:pass@localhost:5432/mydb".into());
+/// let pool = pg_cfg
+///     .create_pool(Some(Runtime::Tokio1), tokio_postgres::NoTls)
+///     .unwrap();
+///
+/// let config = Config {
+///     pool: PoolConfig::Pool(pool),
+///     schemas: vec!["public".into()],
+///     watch_pg: Some(WatchPg("postgres://user:pass@localhost:5432/mydb".into())),
+/// };
+/// ```
 pub struct Config {
     /// Database connection — either a DSN or an existing pool.
     pub pool: PoolConfig,
