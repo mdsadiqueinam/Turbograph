@@ -1,5 +1,6 @@
 use serde_json::{Map, Value};
 use tokio_postgres::{Row, types::Type};
+use uuid::Uuid;
 
 /// Extension trait for converting a single `tokio_postgres::Row` to a
 /// [`serde_json::Value`].
@@ -26,7 +27,11 @@ impl JsonExt for Row {
         for (i, col) in self.columns().iter().enumerate() {
             let name = col.name().to_string();
 
-            let value = match *col.type_() {
+            let type_ = col.type_().clone();
+            if name == "id" || name == "price" || name == "name" {
+                eprintln!("DEBUG column: name={}, type={:?}", name, type_);
+            }
+            let value = match type_ {
                 Type::BOOL => self
                     .try_get::<_, bool>(i)
                     .map(Value::Bool)
@@ -67,6 +72,18 @@ impl JsonExt for Row {
                     .unwrap_or(Value::Null),
 
                 Type::JSON | Type::JSONB => self.try_get::<usize, Value>(i).unwrap_or(Value::Null),
+
+                // UUID type (OID 2950)
+                Type::UUID => self
+                    .try_get::<_, Uuid>(i)
+                    .map(|v| Value::String(v.to_string()))
+                    .unwrap_or(Value::Null),
+
+                // NUMERIC type (OID 1700)
+                Type::NUMERIC => self
+                    .try_get::<_, String>(i)
+                    .map(Value::String)
+                    .unwrap_or(Value::Null),
 
                 _ => self
                     .try_get::<usize, String>(i)
