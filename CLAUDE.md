@@ -47,9 +47,21 @@ cargo run --manifest-path examples/server/Cargo.toml
    - `type_mapping.rs`: PostgreSQL to GraphQL type mapping
 
 4. **Models** (`src/models/`):
-   - `config.rs`: Library configuration (`Config`, `PoolConfig`)
+   - `config.rs`: Library configuration (`Config`, `PoolConfig`, `WatchPg`)
    - `table.rs`: Table/Column metadata from introspection
    - `transaction.rs`: `TransactionConfig` for per-request transaction settings
+
+### Schema Watching
+
+The `watch_pg` option in `Config` (`Option<WatchPg>`) enables automatic schema rebuilding when the PostgreSQL schema changes. Pass the connection URL via `WatchPg(url_string)` to enable watching:
+
+```rust
+let config = Config {
+    pool: PoolConfig::ConnectionString("postgres://...".to_string()),
+    schemas: vec!["public".to_string()],
+    watch_pg: Some(WatchPg("postgres://...".to_string())),
+};
+```
 
 ### Query Execution Flow
 

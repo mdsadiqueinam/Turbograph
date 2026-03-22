@@ -5,7 +5,7 @@ use deadpool_postgres::Pool;
 use tokio::sync::RwLock;
 
 use crate::graphql;
-use crate::models::config::{Config, PoolConfig};
+use crate::models::config::Config;
 use crate::models::table::Table;
 
 /// The main entry point for consuming the library.
@@ -38,23 +38,12 @@ impl TurboGraph {
     pub async fn new(config: Config) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let watch_pg = config.watch_pg;
 
-        let connection_url = if watch_pg {
-            match &config.pool {
-                PoolConfig::ConnectionString(url) => Some(url.clone()),
-                PoolConfig::Pool(_) => {
-                    return Err("watch_pg requires PoolConfig::ConnectionString".into());
-                }
-            }
-        } else {
-            None
-        };
-
         let pool = Arc::new(crate::db::pool::resolve(config.pool)?);
         let built_schema = rebuild_schema(&pool, &config.schemas).await?;
         let schema = Arc::new(RwLock::new(built_schema));
 
-        if watch_pg {
-            let url = connection_url.unwrap();
+        if let Some(url) = watch_pg {
+            let url = url.0;
             crate::db::watch::install_triggers(&pool).await?;
             crate::db::watch::start_watching(url, pool, config.schemas, schema.clone()).await?;
         }

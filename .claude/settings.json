@@ -7,5 +7,12 @@
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M2.7",
         "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M2.7",
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M2.7"
+    },
+    "enabledPlugins": {
+        "rust-analyzer-lsp@claude-plugins-official": true,
+        "claude-md-management@claude-plugins-official": true,
+        "ralph-loop@claude-plugins-official": true,
+        "skill-creator@claude-plugins-official": true,
+        "context7@claude-plugins-official": true
     }
 }

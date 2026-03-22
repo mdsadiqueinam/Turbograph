@@ -5,7 +5,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
-use turbograph::{Config, PoolConfig, TransactionConfig, TurboGraph};
+use turbograph::{Config, PoolConfig, TransactionConfig, TurboGraph, WatchPg};
 
 #[tokio::main]
 async fn main() {
@@ -14,7 +14,9 @@ async fn main() {
             "postgres://postgres:Aa123456@localhost:5432/app-db".into(),
         ),
         schemas: vec!["public".into()],
-        watch_pg: true,
+        watch_pg: Some(WatchPg(
+            "postgres://postgres:Aa123456@localhost:5432/app-db".into(),
+        )),
     })
     .await
     .expect("failed to build schema");

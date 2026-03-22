@@ -30,7 +30,7 @@ async fn all_db_tables_are_present_in_schema() {
     let server = build_schema(Config {
         pool: PoolConfig::ConnectionString(url.clone()),
         schemas: vec!["public".to_string()],
-        watch_pg: false,
+        watch_pg: None,
     })
     .await
     .expect("build_schema failed");
