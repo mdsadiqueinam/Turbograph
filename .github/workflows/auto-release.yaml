@@ -144,7 +144,7 @@ jobs:
           VERSION="v${{ steps.parse.outputs.version }}"
 
           gh release create "$VERSION" \
-            --title "Release $VERSION" \
+            --title "Release $VERSION 🚀" \
             --notes "$DESCRIPTION" \
             --draft \
             --target main
