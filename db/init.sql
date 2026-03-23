@@ -67,6 +67,21 @@ CREATE TABLE IF NOT EXISTS public.post_tags (
 
 COMMENT ON TABLE public.post_tags IS 'Associates posts with tags. @omit create,update,delete';
 
+-- -------------------------------------------------------
+-- products (UUID primary key table for testing)
+-- -------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS public.products (
+    id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name        VARCHAR(255) NOT NULL,
+    description TEXT,
+    price       DOUBLE PRECISION NOT NULL DEFAULT 0.00,
+    stock       INT          NOT NULL DEFAULT 0,
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- ==============================================================
 -- Seed data
 -- ==============================================================
@@ -105,6 +120,11 @@ INSERT INTO public.post_tags (post_id, tag_id) VALUES
     (6, 4),               -- Designing Good APIs: api-design
     (8, 3), (8, 2);       -- Turbograph from Scratch: graphql, postgresql
 
+INSERT INTO public.products (name, description, price, stock, is_active) VALUES
+    ('Laptop', 'High-performance laptop', 999.99, 10, TRUE),
+    ('Mouse', 'Wireless mouse', 29.99, 50, TRUE),
+    ('Keyboard', 'Mechanical keyboard', 79.99, 25, TRUE);
+
 INSERT INTO public.comments (post_id, author_id, body) VALUES
     (1, 2, 'Great intro! The ownership section really clicked for me.'),
     (1, 3, 'Would love a follow-up on lifetimes.'),
@@ -141,6 +161,7 @@ GRANT USAGE ON SCHEMA public TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.users TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.posts TO app_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.comments TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.products TO app_user;
 
 -- Grant permissions on sequences for serial IDs
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
@@ -149,6 +170,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
 -- 4. Define Policies
 
@@ -176,8 +198,14 @@ CREATE POLICY posts_delete_policy ON public.posts FOR DELETE TO app_user
 -- Anyone can create, see. author_id = app.current_user_id can update/delete.
 CREATE POLICY comments_select_policy ON public.comments FOR SELECT TO app_user USING (true);
 CREATE POLICY comments_insert_policy ON public.comments FOR INSERT TO app_user WITH CHECK (true);
-CREATE POLICY comments_update_policy ON public.comments FOR UPDATE TO app_user 
+CREATE POLICY comments_update_policy ON public.comments FOR UPDATE TO app_user
     USING (author_id = current_setting('app.current_user_id', true)::integer)
     WITH CHECK (author_id = current_setting('app.current_user_id', true)::integer);
-CREATE POLICY comments_delete_policy ON public.comments FOR DELETE TO app_user 
+CREATE POLICY comments_delete_policy ON public.comments FOR DELETE TO app_user
     USING (author_id = current_setting('app.current_user_id', true)::integer);
+
+-- PRODUCTS Policy (anyone can CRUD - for testing UUID support)
+CREATE POLICY products_select_policy ON public.products FOR SELECT TO app_user USING (true);
+CREATE POLICY products_insert_policy ON public.products FOR INSERT TO app_user WITH CHECK (true);
+CREATE POLICY products_update_policy ON public.products FOR UPDATE TO app_user USING (true);
+CREATE POLICY products_delete_policy ON public.products FOR DELETE TO app_user USING (true);

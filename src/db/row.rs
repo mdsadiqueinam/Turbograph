@@ -1,5 +1,7 @@
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use serde_json::{Map, Value};
 use tokio_postgres::{Row, types::Type};
+use uuid::Uuid;
 
 /// Extension trait for converting a single `tokio_postgres::Row` to a
 /// [`serde_json::Value`].
@@ -26,7 +28,8 @@ impl JsonExt for Row {
         for (i, col) in self.columns().iter().enumerate() {
             let name = col.name().to_string();
 
-            let value = match *col.type_() {
+            let type_ = col.type_().clone();
+            let value = match type_ {
                 Type::BOOL => self
                     .try_get::<_, bool>(i)
                     .map(Value::Bool)
@@ -54,7 +57,7 @@ impl JsonExt for Row {
                     .map(Value::Number)
                     .unwrap_or(Value::Null),
 
-                Type::FLOAT8 => self
+                Type::FLOAT8 | Type::NUMERIC => self
                     .try_get::<usize, f64>(i)
                     .ok()
                     .and_then(serde_json::Number::from_f64)
@@ -67,6 +70,43 @@ impl JsonExt for Row {
                     .unwrap_or(Value::Null),
 
                 Type::JSON | Type::JSONB => self.try_get::<usize, Value>(i).unwrap_or(Value::Null),
+
+                // UUID type
+                Type::UUID => self
+                    .try_get::<_, Uuid>(i)
+                    .map(|v| Value::String(v.to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIMESTAMPTZ type - PostgreSQL stores as UTC, convert to DateTime<Utc>
+                Type::TIMESTAMPTZ => self
+                    .try_get::<_, DateTime<Utc>>(i)
+                    .map(|v| Value::String(v.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+
+                // TIMESTAMP type - stored as server timezone, convert to NaiveDateTime and format as iso 8601 string without timezone
+                Type::TIMESTAMP => self
+                    .try_get::<_, NaiveDateTime>(i)
+                    .map(|v| Value::String(v.format("%Y-%m-%d:%H:%M:%S").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // DATE type - convert to NaiveDate and format as ISO date string
+                Type::DATE => self
+                    .try_get::<_, NaiveDate>(i)
+                    .map(|v| Value::String(v.format("%Y-%m-%d").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIME type - convert to NaiveTime and format as ISO time string
+                Type::TIME => self
+                    .try_get::<_, NaiveTime>(i)
+                    .map(|v| Value::String(v.format("%H:%M:%S%.f").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIMETZ type - PostgreSQL TIME WITH TIME ZONE, chrono reads as NaiveTime
+                // (timezone offset is not preserved by chrono deserialization)
+                Type::TIMETZ => self
+                    .try_get::<_, NaiveTime>(i)
+                    .map(|v| Value::String(v.format("%H:%M:%S%.f").to_string()))
+                    .unwrap_or(Value::Null),
 
                 _ => self
                     .try_get::<usize, String>(i)

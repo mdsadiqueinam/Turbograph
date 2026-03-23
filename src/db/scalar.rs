@@ -1,6 +1,7 @@
 use bytes::BytesMut;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use tokio_postgres::types::{IsNull, ToSql, Type};
+use uuid::Uuid;
 
 /// Typed SQL array parameter wrapper.
 ///
@@ -25,6 +26,8 @@ pub enum SqlArray {
     Float8(Vec<f64>),
     /// `TEXT[]`
     Text(Vec<String>),
+    /// `UUID[]`
+    Uuid(Vec<Uuid>),
 }
 
 impl ToSql for SqlArray {
@@ -41,6 +44,7 @@ impl ToSql for SqlArray {
             SqlArray::Float4(v) => v.to_sql(ty, out),
             SqlArray::Float8(v) => v.to_sql(ty, out),
             SqlArray::Text(v) => v.to_sql(ty, out),
+            SqlArray::Uuid(v) => v.to_sql(ty, out),
         }
     }
 
@@ -54,6 +58,7 @@ impl ToSql for SqlArray {
                 | Type::FLOAT4_ARRAY
                 | Type::FLOAT8_ARRAY
                 | Type::TEXT_ARRAY
+                | Type::UUID_ARRAY
         )
     }
 
@@ -99,6 +104,7 @@ pub(crate) enum SqlScalar {
     Time(NaiveTime),
     Timestamp(NaiveDateTime),
     Timestamptz(DateTime<Utc>),
+    Uuid(Uuid),
     Array(SqlArray),
 }
 
@@ -122,6 +128,7 @@ impl ToSql for SqlScalar {
             SqlScalar::Time(v) => v.to_sql(ty, out),
             SqlScalar::Timestamp(v) => v.to_sql(ty, out),
             SqlScalar::Timestamptz(v) => v.to_sql(ty, out),
+            SqlScalar::Uuid(v) => v.to_sql(ty, out),
             SqlScalar::Array(v) => v.to_sql(ty, out),
         }
     }
@@ -146,6 +153,7 @@ impl ToSql for SqlScalar {
                 | Type::TIME
                 | Type::TIMESTAMP
                 | Type::TIMESTAMPTZ
+                | Type::UUID
         ) || SqlArray::accepts(ty)
     }
 

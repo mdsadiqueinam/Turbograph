@@ -8,7 +8,7 @@ use super::type_mapping::{get_field_value, get_type_ref};
 
 fn generate_field(column: Arc<Column>) -> Field {
     Field::new(
-        column.name().to_string(),
+        column.field_name(),
         get_type_ref(&column),
         move |ctx| {
             let column = column.clone();

@@ -2,6 +2,7 @@ use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::{FieldValue, TypeRef};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use tokio_postgres::types::Type;
+use uuid::Uuid;
 
 use crate::models::table::Column;
 
@@ -24,9 +25,12 @@ pub(crate) fn get_field_value<'a>(
         Type::INT8 => FieldValue::value(raw_val.as_i64().map(|v| v.to_string())),
         Type::FLOAT4 | Type::FLOAT8 => FieldValue::value(raw_val.as_f64()),
         Type::NUMERIC => FieldValue::value(raw_val.as_f64()),
-        Type::TEXT | Type::VARCHAR | Type::BPCHAR => FieldValue::value(raw_val.as_str()),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::UUID => {
+            FieldValue::value(raw_val.as_str())
+        }
         // JSON/JSONB: serialise to a JSON string
         Type::JSON | Type::JSONB => FieldValue::value(Some(raw_val.to_string())),
+
         // date/time: already serialised as ISO 8601 strings by Postgres row JSON
         Type::DATE | Type::TIME | Type::TIMETZ | Type::TIMESTAMP | Type::TIMESTAMPTZ => {
             FieldValue::value(raw_val.as_str())
@@ -64,14 +68,16 @@ pub(crate) fn get_field_value<'a>(
                 .map(|v| FieldValue::value(v.as_f64()))
                 .collect::<Vec<_>>(),
         ),
-        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY => FieldValue::list(
-            raw_val
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(|v| FieldValue::value(v.as_str()))
-                .collect::<Vec<_>>(),
-        ),
+        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY | Type::UUID_ARRAY => {
+            FieldValue::list(
+                raw_val
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|v| FieldValue::value(v.as_str()))
+                    .collect::<Vec<_>>(),
+            )
+        }
         Type::JSON_ARRAY | Type::JSONB_ARRAY => FieldValue::list(
             raw_val
                 .as_array()
@@ -94,9 +100,10 @@ pub(crate) fn get_type_ref(column: &Column) -> TypeRef {
         Type::INT8 => (TypeRef::STRING, false),
         Type::FLOAT4 | Type::FLOAT8 => (TypeRef::FLOAT, false),
         Type::NUMERIC => (TypeRef::FLOAT, false),
-        Type::TEXT | Type::VARCHAR | Type::BPCHAR => (TypeRef::STRING, false),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::UUID => (TypeRef::STRING, false),
         // JSON/JSONB serialised as a JSON string
         Type::JSON | Type::JSONB => (TypeRef::STRING, false),
+
         // date/time types serialised as ISO 8601 strings
         Type::DATE | Type::TIME | Type::TIMETZ | Type::TIMESTAMP | Type::TIMESTAMPTZ => {
             (TypeRef::STRING, false)
@@ -106,7 +113,9 @@ pub(crate) fn get_type_ref(column: &Column) -> TypeRef {
         Type::INT2_ARRAY | Type::INT4_ARRAY => (TypeRef::INT, true),
         Type::INT8_ARRAY => (TypeRef::STRING, true),
         Type::FLOAT4_ARRAY | Type::FLOAT8_ARRAY => (TypeRef::FLOAT, true),
-        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY => (TypeRef::STRING, true),
+        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY | Type::UUID_ARRAY => {
+            (TypeRef::STRING, true)
+        }
         Type::JSON_ARRAY | Type::JSONB_ARRAY => (TypeRef::STRING, true),
         _ => (TypeRef::STRING, false),
     };
@@ -128,7 +137,7 @@ pub(crate) fn condition_type_ref(column: &Column) -> Option<TypeRef> {
         // INT8 mapped to String (i64 > i32 GraphQL range)
         Type::INT8 => TypeRef::STRING,
         Type::FLOAT4 | Type::FLOAT8 => TypeRef::FLOAT,
-        Type::TEXT | Type::VARCHAR | Type::BPCHAR => TypeRef::STRING,
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::UUID => TypeRef::STRING,
         // JSON/JSONB accept a serialised JSON string for filtering
         Type::JSON | Type::JSONB => TypeRef::STRING,
         // NUMERIC: accept as Float for filtering
@@ -238,14 +247,21 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
                 None
             }
         }
+        Type::UUID => {
+            if let GqlValue::String(s) = val {
+                s.parse::<Uuid>().ok().map(SqlScalar::Uuid)
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::db::scalar::SqlScalar;
     use super::*;
+    use crate::db::scalar::SqlScalar;
     use crate::models::table::Column;
     use async_graphql::Value as GqlValue;
     use serde_json::json;
@@ -355,6 +371,30 @@ mod tests {
         assert_eq!(get_type_ref(&col).to_string(), "[String!]");
     }
 
+    #[test]
+    fn test_type_ref_uuid_non_nullable() {
+        let col = Column::new_for_test("id", Type::UUID, false, false);
+        assert_eq!(get_type_ref(&col).to_string(), "String!");
+    }
+
+    #[test]
+    fn test_type_ref_uuid_nullable() {
+        let col = Column::new_for_test("id", Type::UUID, true, false);
+        assert_eq!(get_type_ref(&col).to_string(), "String");
+    }
+
+    #[test]
+    fn test_type_ref_uuid_array_non_nullable() {
+        let col = Column::new_for_test("ids", Type::UUID_ARRAY, false, false);
+        assert_eq!(get_type_ref(&col).to_string(), "[String!]");
+    }
+
+    #[test]
+    fn test_type_ref_uuid_array_nullable() {
+        let col = Column::new_for_test("ids", Type::UUID_ARRAY, true, false);
+        assert_eq!(get_type_ref(&col).to_string(), "[String]");
+    }
+
     // ── get_field_value ───────────────────────────────────────────────────────
 
     #[test]
@@ -462,6 +502,20 @@ mod tests {
         assert!(get_field_value(&col, &val).is_some());
     }
 
+    #[test]
+    fn test_field_value_uuid_present() {
+        let col = Column::new_for_test("id", Type::UUID, false, false);
+        let val = json!({ "id": "550e8400-e29b-41d4-a716-446655440000" });
+        assert!(get_field_value(&col, &val).is_some());
+    }
+
+    #[test]
+    fn test_field_value_uuid_array_present() {
+        let col = Column::new_for_test("ids", Type::UUID_ARRAY, false, false);
+        let val = json!({ "ids": ["550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"] });
+        assert!(get_field_value(&col, &val).is_some());
+    }
+
     // ── condition_type_ref ───────────────────────────────────────────────────
 
     #[test]
@@ -503,6 +557,18 @@ mod tests {
     #[test]
     fn test_condition_type_ref_bool_array_excluded() {
         let col = Column::new_for_test("flags", Type::BOOL_ARRAY, false, false);
+        assert!(condition_type_ref(&col).is_none());
+    }
+
+    #[test]
+    fn test_condition_type_ref_uuid() {
+        let col = Column::new_for_test("id", Type::UUID, false, false);
+        assert_eq!(condition_type_ref(&col).unwrap().to_string(), "String");
+    }
+
+    #[test]
+    fn test_condition_type_ref_uuid_array_excluded() {
+        let col = Column::new_for_test("ids", Type::UUID_ARRAY, false, false);
         assert!(condition_type_ref(&col).is_none());
     }
 
@@ -559,5 +625,13 @@ mod tests {
         let col = Column::new_for_test("ids", Type::INT4_ARRAY, false, false);
         let val = GqlValue::Number(serde_json::Number::from(1_i64));
         assert!(to_sql_scalar(&col, &val).is_none());
+    }
+
+    #[test]
+    fn test_to_sql_scalar_uuid() {
+        let col = Column::new_for_test("id", Type::UUID, false, false);
+        let val = GqlValue::String("550e8400-e29b-41d4-a716-446655440000".to_string());
+        let result = to_sql_scalar(&col, &val);
+        assert!(matches!(result, Some(SqlScalar::Uuid(_))));
     }
 }
