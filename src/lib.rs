@@ -26,7 +26,7 @@
 //!             "postgres://user:pass@localhost:5432/mydb".into(),
 //!         ),
 //!         schemas: vec!["public".into()],
-//!         watch_pg: false,
+//!         watch_pg: None,
 //!     })
 //!     .await?;
 //!
@@ -47,7 +47,7 @@ mod error;
 mod graphql;
 mod models;
 mod schema;
-mod utils;
+pub mod utils;
 
 pub use db::error::DbError;
 pub use models::config::*;
@@ -76,7 +76,7 @@ pub use schema::TurboGraph;
 ///             "postgres://user:pass@localhost:5432/mydb".into(),
 ///         ),
 ///         schemas: vec!["public".into()],
-///         watch_pg: false,
+///         watch_pg: None,
 ///     })
 ///     .await?;
 ///     Ok(())

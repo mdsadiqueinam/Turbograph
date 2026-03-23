@@ -11,6 +11,10 @@ mod executor;
 
 // ── CREATE ────────────────────────────────────────────────────────────────────
 
+/// Builds the `createXxx` root Mutation field for a table.
+///
+/// Accepts a single `input: CreateXxxInput!` argument and delegates to
+/// [`executor::execute_create`].
 fn build_create_field(
     table: &Table,
     type_name: String, // owned, moved in
@@ -55,6 +59,11 @@ fn build_create_field(
 
 // ── UPDATE ────────────────────────────────────────────────────────────────────
 
+/// Builds the `updateXxx` root Mutation field for a table.
+///
+/// Accepts `patch: UpdateXxxPatch!` (columns to set) and an optional
+/// `condition: XxxCondition` (WHERE filter).  Delegates to
+/// [`executor::execute_update`].
 fn build_update_field(
     table: &Table,
     type_name: String,
@@ -120,6 +129,10 @@ fn build_update_field(
 
 // ── DELETE ────────────────────────────────────────────────────────────────────
 
+/// Builds the `deleteXxx` root Mutation field for a table.
+///
+/// Accepts an optional `condition: XxxCondition` argument (WHERE filter) and
+/// delegates to [`executor::execute_delete`].
 fn build_delete_field(
     type_name: String,
     tbl_schema: String,

@@ -5,6 +5,10 @@ use crate::models::connection::{ConnectionPayload, EdgePayload};
 use super::super::connection::encode_cursor;
 
 /// Builds a `ConnectionPayload` from already-fetched query results.
+///
+/// Computes `hasNextPage` and `hasPreviousPage` from the `total_count` and
+/// `offset`, assigns base64-encoded cursors to each edge, and wraps the result
+/// in a [`FieldValue`] ready for the GraphQL resolver.
 pub(super) fn build_connection_payload(
     total_count: i64,
     json_rows: Vec<serde_json::Value>,

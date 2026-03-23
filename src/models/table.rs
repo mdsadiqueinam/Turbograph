@@ -41,6 +41,13 @@ pub struct Omit {
 }
 
 impl Omit {
+    /// Parses the `@omit` annotation from a PostgreSQL object comment.
+    ///
+    /// - If `comment` contains `@omit` with no arguments, all four operations
+    ///   are suppressed.
+    /// - If `comment` contains `@omit create,update,delete` (or any subset),
+    ///   only the listed operations are suppressed.
+    /// - If `comment` does not contain `@omit`, no operations are suppressed.
     pub(crate) fn new(comment: &str) -> Self {
         static OMIT_REGEX: LazyLock<regex::Regex> =
             LazyLock::new(|| regex::Regex::new(r"@omit\s+([^\s]+)").unwrap());
@@ -110,6 +117,13 @@ pub struct Column {
 }
 
 impl Column {
+    /// Parses a PostgreSQL catalog row (from the `pg_attribute` query in
+    /// [`crate::db::introspect`]) into a [`Column`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Query`] if any required column cannot be extracted
+    /// from the row.
     pub(crate) fn form_row(row: &tokio_postgres::Row) -> Result<Self, crate::db::error::DbError> {
         let table_oid = row
             .try_get::<_, u32>(0)
@@ -157,7 +171,10 @@ impl Column {
         &self.name
     }
 
-    // The camelCase field name derived from the column name, used in GraphQL types and inputs.
+    /// The camelCase field name derived from the column name.
+    ///
+    /// Used for GraphQL type field names and mutation input fields.
+    /// For example, `created_at` becomes `createdAt`.
     pub fn field_name(&self) -> String {
         to_camel_case(self.name())
     }
@@ -234,6 +251,16 @@ pub struct Table {
 }
 
 impl Table {
+    /// Parses a PostgreSQL catalog row (from the `pg_class` query in
+    /// [`crate::db::introspect`]) into a [`Table`].
+    ///
+    /// The returned table has an empty [`columns`](Self::columns) list; call
+    /// [`push_column`](Self::push_column) to populate it after construction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Query`] if any required column cannot be extracted
+    /// from the row.
     pub(crate) fn from_row(row: &tokio_postgres::Row) -> Result<Self, crate::db::error::DbError> {
         let oid = row
             .try_get::<_, u32>(0)
@@ -267,10 +294,15 @@ impl Table {
         })
     }
 
+    /// Appends a column to this table's column list.
+    ///
+    /// Called by the introspection layer after all columns have been fetched
+    /// and matched to their parent table.
     pub(crate) fn push_column(&mut self, column: Column) {
         self.columns.push(Arc::new(column));
     }
 
+    /// Returns the ordered list of columns for this table.
     pub fn columns(&self) -> &[Arc<Column>] {
         &self.columns
     }

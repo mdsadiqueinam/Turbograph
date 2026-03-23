@@ -60,26 +60,44 @@ pub struct TransactionConfig {
 }
 
 impl TransactionConfig {
+    /// Set the transaction isolation level.
     pub fn isolation_level(mut self, level: tokio_postgres::IsolationLevel) -> Self {
         self.isolation_level = Some(level);
         self
     }
+
+    /// Mark the transaction as `READ ONLY`.
     pub fn read_only(mut self) -> Self {
         self.read_only = true;
         self
     }
+
+    /// Mark the transaction as `DEFERRABLE`.
+    ///
+    /// Only meaningful when the transaction is also serialisable and read-only.
     pub fn deferrable(mut self) -> Self {
         self.deferrable = true;
         self
     }
+
+    /// Switch to the given PostgreSQL role inside the transaction via
+    /// `SET LOCAL ROLE`.
     pub fn role(mut self, role: impl Into<String>) -> Self {
         self.role = Some(role.into());
         self
     }
+
+    /// Set a statement timeout (in seconds) via `SET LOCAL statement_timeout`.
     pub fn timeout_seconds(mut self, secs: u64) -> Self {
         self.timeout_seconds = Some(secs);
         self
     }
+
+    /// Append an arbitrary `SET LOCAL` key-value pair to the transaction.
+    ///
+    /// Values are applied with `SELECT set_config($1, $2, true)`, making them
+    /// visible to row-level security policies and PostgreSQL functions for the
+    /// duration of the transaction.
     pub fn setting(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.settings.push((key.into(), value.into()));
         self
