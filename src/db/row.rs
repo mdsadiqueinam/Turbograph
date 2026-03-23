@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_postgres::{Row, types::Type};
 use uuid::Uuid;
@@ -74,6 +75,18 @@ impl JsonExt for Row {
                 Type::UUID => self
                     .try_get::<_, Uuid>(i)
                     .map(|v| Value::String(v.to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIMESTAMPTZ type - PostgreSQL stores as UTC, convert to DateTime<Utc>
+                Type::TIMESTAMPTZ => self
+                    .try_get::<_, DateTime<Utc>>(i)
+                    .map(|v| Value::String(v.to_rfc3339()))
+                    .unwrap_or(Value::Null),
+
+                // TIMESTAMP type - stored as server timezone, convert to NaiveDateTime and format as iso 8601 string without timezone
+                Type::TIMESTAMP => self
+                    .try_get::<_, NaiveDateTime>(i)
+                    .map(|v| Value::String(v.format("%Y-%m-%d:%H:%M:%S").to_string()))
                     .unwrap_or(Value::Null),
 
                 _ => self
