@@ -261,7 +261,7 @@ impl<O> Select<O> {
             .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
         if let Some(ref cfg) = tx_config {
-            apply_settings(&*client, cfg)
+            apply_settings(&client, cfg)
                 .await
                 .map_err(|e| DbError::Transaction(e.to_string()))?;
         }

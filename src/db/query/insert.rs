@@ -106,7 +106,7 @@ impl Insert {
 
     /// Returns the full `INSERT INTO … VALUES …` SQL string.
     pub fn get_query(&self) -> String {
-        let q = if self.values.is_empty() {
+        if self.values.is_empty() {
             format!("INSERT INTO {} DEFAULT VALUES", self.table)
         } else {
             let columns = self.columns();
@@ -135,9 +135,7 @@ impl Insert {
                 q.push(')');
             }
             q
-        };
-
-        q
+        }
     }
 
     /// Execute the insert and return the number of rows affected.

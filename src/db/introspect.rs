@@ -5,7 +5,7 @@ use std::collections::HashMap;
 fn map_columns_to_table(tables: Vec<Table>, columns: Vec<Column>) -> Vec<Table> {
     let mut table_map: HashMap<u32, Table> = tables
         .into_iter()
-        .map(|table| (table.oid().clone(), table))
+        .map(|table| (*table.oid(), table))
         .collect();
 
     for col in columns.into_iter() {
@@ -52,7 +52,7 @@ pub async fn get_tables(
 
     let tables: Vec<Table> = table_rows
         .iter()
-        .map(|r| Table::from_row(r))
+        .map(Table::from_row)
         .collect::<Result<Vec<_>, _>>()?;
 
     let table_oids = tables.iter().map(|t| t.oid()).collect::<Vec<&u32>>();
@@ -82,7 +82,7 @@ pub async fn get_tables(
 
     let columns: Vec<Column> = column_rows
         .iter()
-        .map(|r| Column::form_row(r))
+        .map(Column::form_row)
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(map_columns_to_table(tables, columns))

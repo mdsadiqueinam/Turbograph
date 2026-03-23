@@ -36,7 +36,7 @@
 ///     println!("{:?}", response);
 /// }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TransactionConfig {
     /// Transaction isolation level.  `None` uses the server default
     /// (`READ COMMITTED`).
@@ -57,19 +57,6 @@ pub struct TransactionConfig {
     /// which means they are visible to row-level security policies and
     /// PostgreSQL functions as session-like values.
     pub settings: Vec<(String, String)>,
-}
-
-impl Default for TransactionConfig {
-    fn default() -> Self {
-        Self {
-            isolation_level: None,
-            read_only: false,
-            deferrable: false,
-            role: None,
-            timeout_seconds: None,
-            settings: Vec::new(),
-        }
-    }
 }
 
 impl TransactionConfig {

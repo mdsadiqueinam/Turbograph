@@ -117,7 +117,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
                     total_count,
                     json_rows,
                     &order_by,
-                    off as i64,
+                    off,
                 ))
             })
         },
