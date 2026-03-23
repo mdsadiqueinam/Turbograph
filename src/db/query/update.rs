@@ -20,8 +20,7 @@ use super::{QueryBase, SupportsWhere};
 ///
 /// Combine [`set`](Update::set) calls to build the `SET` clause, then use
 /// [`WhereBuilder`](crate::db::where_clause::WhereBuilder) methods to add
-/// a `WHERE` clause.  Append `RETURNING *` with
-/// [`returning_all`](Update::returning_all) and execute via
+/// a `WHERE` clause.  Execute via
 /// [`execute_with_returning`](Update::execute_with_returning) to get back the
 /// modified rows.
 ///
@@ -37,7 +36,6 @@ use super::{QueryBase, SupportsWhere};
 /// let mut q = pool.update("users");
 /// q.set("email", Some(SqlScalar::Text("new@example.com".into())));
 /// q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
-/// q.returning_all();
 /// let rows = q.execute_with_returning(None).await?;
 /// # Ok(()) }
 /// ```
@@ -47,7 +45,6 @@ pub struct Update {
     where_clause: String,
     pool: Pool,
     values: HashMap<String, Option<SqlScalar>>,
-    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -85,14 +82,7 @@ impl Update {
             where_clause: String::new(),
             pool,
             values: HashMap::new(),
-            returning: false,
         }
-    }
-
-    /// Append `RETURNING *` to the generated SQL.
-    pub fn returning_all(&mut self) -> &mut Self {
-        self.returning = true;
-        self
     }
 
     /// Set a column to a value. These become the `SET col=$N` assignments.
@@ -145,10 +135,6 @@ impl Update {
             q.push_str(&shifted_where);
         }
 
-        if self.returning {
-            q.push_str(" RETURNING *");
-        }
-
         q
     }
 
@@ -164,7 +150,8 @@ impl Update {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let query = self.get_query();
+        let mut query = self.get_query();
+        query.push_str(" RETURNING *");
         let params = self.all_params();
         execute_query_with_returning(&self.pool, &tx_config, &query, &params).await
     }

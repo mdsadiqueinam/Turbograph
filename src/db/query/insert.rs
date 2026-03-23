@@ -19,8 +19,7 @@ use super::QueryBase;
 ///
 /// Create instances via [`PoolExt::insert`](crate::db::pool::PoolExt::insert).
 ///
-/// Supports single and multi-row inserts.  Append `RETURNING *` with
-/// [`returning_all`](Insert::returning_all) and execute via
+/// Supports single and multi-row inserts.  Execute via
 /// [`execute_with_returning`](Insert::execute_with_returning) to get back the
 /// inserted rows.
 ///
@@ -36,7 +35,7 @@ use super::QueryBase;
 /// let mut row = HashMap::new();
 /// row.insert("name".to_string(), Some(SqlScalar::Text("Alice".into())));
 /// row.insert("age".to_string(), Some(SqlScalar::Int4(30)));
-/// q.values(row).returning_all();
+/// q.values(row);
 /// let rows = q.execute_with_returning(None).await?;
 /// # Ok(()) }
 /// ```
@@ -45,7 +44,6 @@ pub struct Insert {
     params: Vec<SqlScalar>,
     pool: Pool,
     values: Vec<HashMap<String, Option<SqlScalar>>>,
-    returning: bool,
 }
 
 // ── QueryBase (no SupportsWhere) ──────────────────────────────────────────────
@@ -83,14 +81,7 @@ impl Insert {
             params: Vec::new(),
             pool,
             values: Vec::new(),
-            returning: false,
         }
-    }
-
-    /// Append `RETURNING *` to the generated SQL.
-    pub fn returning_all(&mut self) -> &mut Self {
-        self.returning = true;
-        self
     }
 
     /// Add a row of values to insert.
@@ -121,7 +112,7 @@ impl Insert {
 
     /// Returns the full `INSERT INTO … VALUES …` SQL string.
     pub fn get_query(&self) -> String {
-        let mut q = if self.values.is_empty() {
+        let q = if self.values.is_empty() {
             format!("INSERT INTO {} DEFAULT VALUES", self.table)
         } else {
             let columns = self.columns();
@@ -152,10 +143,6 @@ impl Insert {
             q
         };
 
-        if self.returning {
-            q.push_str(" RETURNING *");
-        }
-
         q
     }
 
@@ -171,7 +158,8 @@ impl Insert {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let query = self.get_query();
+        let mut query = self.get_query();
+        query.push_str(" RETURNING *");
         let params = self.all_params();
         execute_query_with_returning(&self.pool, &tx_config, &query, &params).await
     }

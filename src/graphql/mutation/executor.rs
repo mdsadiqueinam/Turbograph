@@ -37,7 +37,6 @@ pub(super) async fn execute_create(
 
     let table_ref = quote_table(tbl_schema, tbl_name);
     let mut insert = pool.insert(&table_ref);
-    insert.returning_all();
 
     let mut row = HashMap::new();
     for (key, val) in &input {
@@ -91,7 +90,6 @@ pub(super) async fn execute_update(
 
     let table_ref = quote_table(tbl_schema, tbl_name);
     let mut update = pool.update(&table_ref);
-    update.returning_all();
 
     let mut has_set = false;
     for (key, val) in &patch {
@@ -144,7 +142,6 @@ pub(super) async fn execute_delete(
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
     let table_ref = quote_table(tbl_schema, tbl_name);
     let mut delete = pool.delete(&table_ref);
-    delete.returning_all();
 
     if let Some(pairs) = condition {
         apply_gql_conditions(&mut delete, pairs, columns)?;

@@ -16,8 +16,7 @@ use super::{QueryBase, SupportsWhere};
 /// Create instances via [`PoolExt::delete`](crate::db::pool::PoolExt::delete).
 ///
 /// Use [`WhereBuilder`](crate::db::where_clause::WhereBuilder) methods to add
-/// a `WHERE` clause and optionally append `RETURNING *` with
-/// [`returning_all`](Delete::returning_all).
+/// a `WHERE` clause.
 ///
 /// # Example
 ///
@@ -38,7 +37,6 @@ pub struct Delete {
     params: Vec<SqlScalar>,
     where_clause: String,
     pool: Pool,
-    returning: bool,
 }
 
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
@@ -75,14 +73,7 @@ impl Delete {
             params: Vec::new(),
             where_clause: String::new(),
             pool,
-            returning: false,
         }
-    }
-
-    /// Append `RETURNING *` to the generated SQL.
-    pub fn returning_all(&mut self) -> &mut Self {
-        self.returning = true;
-        self
     }
 
     /// Returns the `WHERE`-clause parameters as trait objects.
@@ -93,19 +84,13 @@ impl Delete {
             .collect()
     }
 
-    /// Returns the full `DELETE FROM … [WHERE …] [RETURNING *]` SQL string.
+    /// Returns the full `DELETE FROM … [WHERE …]` SQL string.
     pub fn get_query(&self) -> String {
-        let mut q = if self.where_clause.is_empty() {
+        if self.where_clause.is_empty() {
             format!("DELETE FROM {}", self.table)
         } else {
             format!("DELETE FROM {}{}", self.table, self.where_clause)
-        };
-
-        if self.returning {
-            q.push_str(" RETURNING *");
         }
-
-        q
     }
 
     /// Execute the delete and return the number of rows affected.
@@ -120,7 +105,8 @@ impl Delete {
         &self,
         tx_config: Option<TransactionConfig>,
     ) -> Result<Vec<Row>, DbError> {
-        let query = self.get_query();
+        let mut query = self.get_query();
+        query.push_str(" RETURNING *");
         let params = self.where_params();
         execute_query_with_returning(&self.pool, &tx_config, &query, &params).await
     }
