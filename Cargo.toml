@@ -3,7 +3,7 @@ members = [".", "examples/server"]
 
 [package]
 name = "turbograph"
-version = "0.3.0"
+version = "v0.3.0"
 edition = "2024"
 description = "Automatic GraphQL API generation from PostgreSQL schemas in Rust"
 license = "MIT"
