@@ -49,9 +49,6 @@ pub struct Insert {
 // ── QueryBase (no SupportsWhere) ──────────────────────────────────────────────
 
 impl QueryBase for Insert {
-    fn table(&self) -> &str {
-        &self.table
-    }
     fn get_where_clause(&self) -> &str {
         ""
     }
@@ -66,9 +63,6 @@ impl QueryBase for Insert {
     }
     fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
         &mut self.params
-    }
-    fn pool(&self) -> &Pool {
-        &self.pool
     }
 }
 
@@ -147,6 +141,7 @@ impl Insert {
     }
 
     /// Execute the insert and return the number of rows affected.
+    #[allow(dead_code)]
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();

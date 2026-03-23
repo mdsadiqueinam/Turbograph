@@ -208,7 +208,10 @@ async fn e2e_products_create() {
     // Verify UUID format (8-4-4-4-12 hex digits)
     let id = product["id"].as_str().expect("id should be a string");
     assert!(id.len() == 36, "UUID should be 36 characters");
-    assert!(id.chars().filter(|c| *c == '-').count() == 4, "UUID should have 4 dashes");
+    assert!(
+        id.chars().filter(|c| *c == '-').count() == 4,
+        "UUID should have 4 dashes"
+    );
 
     assert_eq!(product["name"], json!("Monitor"));
     assert_eq!(product["description"], json!("27-inch 4K display"));
@@ -239,7 +242,10 @@ async fn e2e_products_read() {
     let total = products["totalCount"]
         .as_u64()
         .expect("totalCount should be an integer");
-    assert!(total >= 3, "expected at least 3 seeded products, got {total}");
+    assert!(
+        total >= 3,
+        "expected at least 3 seeded products, got {total}"
+    );
 
     let nodes = products["nodes"]
         .as_array()
@@ -343,7 +349,10 @@ async fn e2e_products_delete() {
     .await;
 
     let deleted = &delete_data["deleteProduct"];
-    assert!(!deleted.as_array().unwrap().is_empty(), "should delete the product");
+    assert!(
+        !deleted.as_array().unwrap().is_empty(),
+        "should delete the product"
+    );
 
     // Verify it's gone by querying allProducts
     let verify = gql(

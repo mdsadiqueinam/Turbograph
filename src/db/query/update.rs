@@ -50,9 +50,6 @@ pub struct Update {
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
 
 impl QueryBase for Update {
-    fn table(&self) -> &str {
-        &self.table
-    }
     fn get_where_clause(&self) -> &str {
         &self.where_clause
     }
@@ -64,9 +61,6 @@ impl QueryBase for Update {
     }
     fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
         &mut self.params
-    }
-    fn pool(&self) -> &Pool {
-        &self.pool
     }
 }
 
@@ -139,6 +133,7 @@ impl Update {
     }
 
     /// Execute the update and return the number of rows affected.
+    #[allow(dead_code)]
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.all_params();

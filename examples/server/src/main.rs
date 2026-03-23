@@ -5,19 +5,16 @@ use axum::{
     response::{Html, IntoResponse},
     routing::get,
 };
-use turbograph::{Config, PoolConfig, TransactionConfig, TurboGraph, WatchPg};
+use turbograph::{Config, TransactionConfig, TurboGraph};
 
 #[tokio::main]
 async fn main() {
-    let server = TurboGraph::new(Config {
-        pool: PoolConfig::ConnectionString(
-            "postgres://postgres:Aa123456@localhost:5432/app-db".into(),
-        ),
-        schemas: vec!["public".into()],
-        watch_pg: Some(WatchPg(
-            "postgres://postgres:Aa123456@localhost:5432/app-db".into(),
-        )),
-    })
+    let server = TurboGraph::new(
+        Config::default()
+            .connection_string("postgres://postgres:Aa123456@localhost:5432/app-db")
+            .schema("public")
+            .watch_pg("postgres://postgres:Aa123456@localhost:5432/app-db"),
+    )
     .await
     .expect("failed to build schema");
 
@@ -31,14 +28,9 @@ async fn main() {
 }
 
 async fn graphql_handler(State(server): State<TurboGraph>, req: GraphQLRequest) -> GraphQLResponse {
-    let tx_config = TransactionConfig {
-        isolation_level: None,
-        read_only: false,
-        deferrable: false,
-        timeout_seconds: None,
-        role: Some("app_user".into()),
-        settings: vec![("app.current_user_id".into(), "1".into())],
-    };
+    let tx_config = TransactionConfig::default()
+        .role("app_user")
+        .setting("app.current_user_id", "1");
     server
         .execute(req.into_inner().data(tx_config))
         .await

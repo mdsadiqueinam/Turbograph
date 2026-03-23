@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_graphql::Value as GqlValue;
-use tokio_postgres::types::Type;
-
 use crate::db::operator::Op;
 use crate::db::scalar::SqlScalar;
 use crate::db::where_clause::WhereBuilder;
 use crate::models::table::Column;
 use crate::utils::inflection::to_screaming_snake_case;
+use async_graphql::Value as GqlValue;
 
 use super::super::filter::supports_range;
 use super::super::type_mapping::{scalars_to_sql_array, to_sql_scalar};

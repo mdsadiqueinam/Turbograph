@@ -450,5 +450,5 @@ Always use **Edition 2021** for new projects. Key improvements over 2018:
 
 ```toml
 [package]
-edition = "2021"
+edition = "2024"
 ```

@@ -1,17 +1,3 @@
-/// A value type used in per-transaction `SET LOCAL` settings.
-///
-/// Wraps primitive Rust types so they can be stored heterogeneously inside
-/// [`TransactionConfig::settings`] without boxing.
-#[derive(Clone)]
-pub enum TransactionSettingsValue {
-    /// A UTF-8 string setting value.
-    String(String),
-    /// A 64-bit signed integer setting value.
-    Integer(i64),
-    /// A boolean setting value.
-    Boolean(bool),
-}
-
 /// Per-request transaction configuration.
 ///
 /// Inject an instance of this struct into the `async_graphql` request data so
@@ -50,7 +36,7 @@ pub enum TransactionSettingsValue {
 ///     println!("{:?}", response);
 /// }
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TransactionConfig {
     /// Transaction isolation level.  `None` uses the server default
     /// (`READ COMMITTED`).
@@ -83,5 +69,32 @@ impl Default for TransactionConfig {
             timeout_seconds: None,
             settings: Vec::new(),
         }
+    }
+}
+
+impl TransactionConfig {
+    pub fn isolation_level(mut self, level: tokio_postgres::IsolationLevel) -> Self {
+        self.isolation_level = Some(level);
+        self
+    }
+    pub fn read_only(mut self) -> Self {
+        self.read_only = true;
+        self
+    }
+    pub fn deferrable(mut self) -> Self {
+        self.deferrable = true;
+        self
+    }
+    pub fn role(mut self, role: impl Into<String>) -> Self {
+        self.role = Some(role.into());
+        self
+    }
+    pub fn timeout_seconds(mut self, secs: u64) -> Self {
+        self.timeout_seconds = Some(secs);
+        self
+    }
+    pub fn setting(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.settings.push((key.into(), value.into()));
+        self
     }
 }

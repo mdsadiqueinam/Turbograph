@@ -97,9 +97,11 @@ impl Omit {
 /// GraphQL entity type and the input types for mutations.
 #[derive(Clone, Debug)]
 pub struct Column {
+    #[allow(dead_code)]
     id: u32,
     table_oid: u32,
     name: String,
+    #[allow(dead_code)]
     comment: String,
     r#type: Type,
     nullable: bool,
@@ -108,18 +110,32 @@ pub struct Column {
 }
 
 impl Column {
-    pub(crate) fn form_row(row: &tokio_postgres::Row) -> Self {
-        let table_oid = row.try_get::<_, u32>(0).unwrap();
-        let column_id = row.try_get::<_, i32>(1).unwrap() as u32;
-        let column_name = row.try_get::<_, String>(2).unwrap();
-        let type_oid = row.try_get::<_, u32>(3).unwrap();
-        let nullable = row.try_get::<_, bool>(4).unwrap();
-        let has_default = row.try_get::<_, bool>(5).unwrap();
-        let comment = row.try_get::<_, String>(6).unwrap_or("".to_string());
+    pub(crate) fn form_row(row: &tokio_postgres::Row) -> Result<Self, crate::db::error::DbError> {
+        let table_oid = row
+            .try_get::<_, u32>(0)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let column_id =
+            row.try_get::<_, i32>(1)
+                .map_err(|e| crate::db::error::DbError::Query(e.to_string()))? as u32;
+        let column_name = row
+            .try_get::<_, String>(2)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let type_oid = row
+            .try_get::<_, u32>(3)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let nullable = row
+            .try_get::<_, bool>(4)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let has_default = row
+            .try_get::<_, bool>(5)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let comment = row
+            .try_get::<_, String>(6)
+            .unwrap_or_else(|_| "".to_string());
         let data_type = Type::from_oid(type_oid).expect("Data type is not supported");
         let omit = Omit::new(&comment);
 
-        Self {
+        Ok(Self {
             id: column_id,
             table_oid,
             name: column_name,
@@ -128,7 +144,7 @@ impl Column {
             nullable,
             has_default,
             omit,
-        }
+        })
     }
 
     /// OID of the table that owns this column.
@@ -172,6 +188,7 @@ impl Column {
     }
 
     /// Returns `true` when the `delete` operation is suppressed for this column.
+    #[allow(dead_code)]
     pub fn omit_delete(&self) -> bool {
         self.omit.delete
     }
@@ -210,21 +227,32 @@ pub struct Table {
     name: String,
     schema_name: String,
     relkind: Relkind,
+    #[allow(dead_code)]
     comment: String,
     columns: Vec<Arc<Column>>,
     omit: Omit,
 }
 
 impl Table {
-    pub(crate) fn from_row(row: &tokio_postgres::Row) -> Self {
-        let oid = row.try_get::<_, u32>(0).unwrap();
-        let schema_name = row.try_get::<_, String>(1).unwrap();
-        let table_name = row.try_get::<_, String>(2).unwrap();
-        let relkind_str = row.try_get::<_, String>(3).unwrap();
-        let comment = row.try_get::<_, String>(4).unwrap_or("".to_string());
+    pub(crate) fn from_row(row: &tokio_postgres::Row) -> Result<Self, crate::db::error::DbError> {
+        let oid = row
+            .try_get::<_, u32>(0)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let schema_name = row
+            .try_get::<_, String>(1)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let table_name = row
+            .try_get::<_, String>(2)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let relkind_str = row
+            .try_get::<_, String>(3)
+            .map_err(|e| crate::db::error::DbError::Query(e.to_string()))?;
+        let comment = row
+            .try_get::<_, String>(4)
+            .unwrap_or_else(|_| "".to_string());
         let omit = Omit::new(&comment);
 
-        Self {
+        Ok(Self {
             oid,
             schema_name,
             name: table_name,
@@ -236,7 +264,7 @@ impl Table {
             comment,
             columns: Vec::new(),
             omit,
-        }
+        })
     }
 
     pub(crate) fn push_column(&mut self, column: Column) {

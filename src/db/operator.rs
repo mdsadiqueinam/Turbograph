@@ -57,7 +57,9 @@ impl Op {
             Self::Gte => ">=",
             Self::Lt => "<",
             Self::Lte => "<=",
-            Self::In => unreachable!("Op::In should be handled via WhereBuilder::where_in(), not sql_operator()"),
+            Self::In => unreachable!(
+                "Op::In should be handled via WhereBuilder::where_in(), not sql_operator()"
+            ),
         }
     }
 

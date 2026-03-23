@@ -113,7 +113,7 @@ pub(crate) async fn rebuild_schema(
     pool: &Arc<Pool>,
     schemas: &[String],
 ) -> Result<Schema, Box<dyn std::error::Error + Send + Sync>> {
-    let tables = crate::db::introspect::get_tables(pool, schemas).await;
+    let tables = crate::db::introspect::get_tables(pool, schemas).await?;
     let tables: Vec<Arc<Table>> = tables.into_iter().map(|t| Arc::new(t)).collect();
 
     let mut query_root = Object::new("Query");

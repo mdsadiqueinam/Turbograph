@@ -28,6 +28,18 @@ pub enum SqlArray {
     Text(Vec<String>),
     /// `UUID[]`
     Uuid(Vec<Uuid>),
+    /// `NUMERIC[]`
+    Numeric(Vec<f64>),
+    /// `DATE[]`
+    Date(Vec<NaiveDate>),
+    /// `TIME[]`
+    Time(Vec<NaiveTime>),
+    /// `TIMESTAMP[]`
+    Timestamp(Vec<NaiveDateTime>),
+    /// `TIMESTAMPTZ[]`
+    Timestamptz(Vec<DateTime<Utc>>),
+    /// `TIMETZ[]`
+    Timetz(Vec<NaiveTime>),
 }
 
 impl ToSql for SqlArray {
@@ -45,6 +57,12 @@ impl ToSql for SqlArray {
             SqlArray::Float8(v) => v.to_sql(ty, out),
             SqlArray::Text(v) => v.to_sql(ty, out),
             SqlArray::Uuid(v) => v.to_sql(ty, out),
+            SqlArray::Numeric(v) => v.to_sql(ty, out),
+            SqlArray::Date(v) => v.to_sql(ty, out),
+            SqlArray::Time(v) => v.to_sql(ty, out),
+            SqlArray::Timestamp(v) => v.to_sql(ty, out),
+            SqlArray::Timestamptz(v) => v.to_sql(ty, out),
+            SqlArray::Timetz(v) => v.to_sql(ty, out),
         }
     }
 
@@ -59,6 +77,12 @@ impl ToSql for SqlArray {
                 | Type::FLOAT8_ARRAY
                 | Type::TEXT_ARRAY
                 | Type::UUID_ARRAY
+                | Type::NUMERIC_ARRAY
+                | Type::DATE_ARRAY
+                | Type::TIME_ARRAY
+                | Type::TIMESTAMP_ARRAY
+                | Type::TIMESTAMPTZ_ARRAY
+                | Type::TIMETZ_ARRAY
         )
     }
 

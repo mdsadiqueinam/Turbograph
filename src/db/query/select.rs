@@ -90,9 +90,6 @@ pub struct Select<O = NoOrder> {
 // ── QueryBase ─────────────────────────────────────────────────────────────────
 
 impl<O> QueryBase for Select<O> {
-    fn table(&self) -> &str {
-        &self.table
-    }
     fn get_where_clause(&self) -> &str {
         &self.where_clause
     }
@@ -104,9 +101,6 @@ impl<O> QueryBase for Select<O> {
     }
     fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
         &mut self.params
-    }
-    fn pool(&self) -> &Pool {
-        &self.pool
     }
 }
 

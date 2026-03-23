@@ -51,7 +51,7 @@ mod utils;
 
 pub use db::error::DbError;
 pub use models::config::*;
-pub use models::transaction::{TransactionConfig, TransactionSettingsValue};
+pub use models::transaction::TransactionConfig;
 pub use schema::TurboGraph;
 
 /// Convenience wrapper around [`TurboGraph::new`].

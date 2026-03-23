@@ -7,19 +7,15 @@ use crate::models::table::{Column, Table};
 use super::type_mapping::{get_field_value, get_type_ref};
 
 fn generate_field(column: Arc<Column>) -> Field {
-    Field::new(
-        column.field_name(),
-        get_type_ref(&column),
-        move |ctx| {
-            let column = column.clone();
+    Field::new(column.field_name(), get_type_ref(&column), move |ctx| {
+        let column = column.clone();
 
-            FieldFuture::new(async move {
-                let parent_value = ctx.parent_value.try_downcast_ref::<serde_json::Value>()?;
-                let field_value = get_field_value(&column, parent_value);
-                Ok(field_value)
-            })
-        },
-    )
+        FieldFuture::new(async move {
+            let parent_value = ctx.parent_value.try_downcast_ref::<serde_json::Value>()?;
+            let field_value = get_field_value(&column, parent_value);
+            Ok(field_value)
+        })
+    })
 }
 
 /// Generates the `async_graphql` [`Object`] type for a database table.

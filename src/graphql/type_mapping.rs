@@ -86,6 +86,26 @@ pub(crate) fn get_field_value<'a>(
                 .map(|v| FieldValue::value(Some(v.to_string())))
                 .collect::<Vec<_>>(),
         ),
+        Type::NUMERIC_ARRAY => FieldValue::list(
+            raw_val
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|v| FieldValue::value(v.as_f64()))
+                .collect::<Vec<_>>(),
+        ),
+        Type::DATE_ARRAY
+        | Type::TIME_ARRAY
+        | Type::TIMETZ_ARRAY
+        | Type::TIMESTAMP_ARRAY
+        | Type::TIMESTAMPTZ_ARRAY => FieldValue::list(
+            raw_val
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|v| FieldValue::value(v.as_str()))
+                .collect::<Vec<_>>(),
+        ),
         _ => FieldValue::value(raw_val.as_str()),
     };
 
@@ -117,6 +137,12 @@ pub(crate) fn get_type_ref(column: &Column) -> TypeRef {
             (TypeRef::STRING, true)
         }
         Type::JSON_ARRAY | Type::JSONB_ARRAY => (TypeRef::STRING, true),
+        Type::NUMERIC_ARRAY => (TypeRef::FLOAT, true),
+        Type::DATE_ARRAY
+        | Type::TIME_ARRAY
+        | Type::TIMETZ_ARRAY
+        | Type::TIMESTAMP_ARRAY
+        | Type::TIMESTAMPTZ_ARRAY => (TypeRef::STRING, true),
         _ => (TypeRef::STRING, false),
     };
 
@@ -373,17 +399,121 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::UUID_ARRAY => {
             if let GqlValue::List(values) = val {
-                let texts = values
+                let uuids = values
                     .iter()
                     .filter_map(|v| {
                         if let GqlValue::String(s) = v {
-                            Some(s.clone())
+                            s.parse::<Uuid>().ok()
                         } else {
                             None
                         }
                     })
                     .collect();
-                Some(SqlScalar::Array(SqlArray::Text(texts)))
+                Some(SqlScalar::Array(SqlArray::Uuid(uuids)))
+            } else {
+                None
+            }
+        }
+        Type::NUMERIC_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let nums = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Number(n) = v {
+                            n.as_f64()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Numeric(nums)))
+            } else {
+                None
+            }
+        }
+        Type::DATE_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let dates = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            s.parse::<NaiveDate>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Date(dates)))
+            } else {
+                None
+            }
+        }
+        Type::TIME_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let times = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            s.parse::<NaiveTime>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Time(times)))
+            } else {
+                None
+            }
+        }
+        Type::TIMESTAMP_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let timestamps = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            s.parse::<NaiveDateTime>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Timestamp(timestamps)))
+            } else {
+                None
+            }
+        }
+        Type::TIMESTAMPTZ_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let timestamps = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            DateTime::parse_from_rfc3339(s)
+                                .ok()
+                                .map(|dt| dt.with_timezone(&Utc))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Timestamptz(timestamps)))
+            } else {
+                None
+            }
+        }
+        Type::TIMETZ_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let times = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            s.parse::<NaiveTime>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                Some(SqlScalar::Array(SqlArray::Timetz(times)))
             } else {
                 None
             }
@@ -449,11 +579,74 @@ pub(crate) fn scalars_to_sql_array(ty: &Type, scalars: Vec<SqlScalar>) -> Option
                 })
                 .collect(),
         )),
-        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::UUID => Some(SqlArray::Text(
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR => Some(SqlArray::Text(
             scalars
                 .into_iter()
                 .filter_map(|s| match s {
                     SqlScalar::Text(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::UUID => Some(SqlArray::Uuid(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Uuid(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::NUMERIC => Some(SqlArray::Numeric(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Numeric(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::DATE => Some(SqlArray::Date(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Date(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::TIME => Some(SqlArray::Time(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Time(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::TIMESTAMP => Some(SqlArray::Timestamp(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Timestamp(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::TIMESTAMPTZ => Some(SqlArray::Timestamptz(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Timestamptz(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::TIMETZ => Some(SqlArray::Timetz(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Time(v) => Some(v),
                     _ => None,
                 })
                 .collect(),

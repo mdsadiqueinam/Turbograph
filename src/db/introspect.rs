@@ -1,3 +1,4 @@
+use crate::db::error::DbError;
 use crate::models::table::{Column, Table};
 use std::collections::HashMap;
 
@@ -25,12 +26,16 @@ fn map_columns_to_table(tables: Vec<Table>, columns: Vec<Column>) -> Vec<Table> 
 /// and parsed into [`Omit`](crate::models::table::Omit) values by
 /// `Table::from_row` / `Column::form_row`, allowing schema generation to
 /// suppress fields and mutations according to the `@omit` annotation.
-pub async fn get_tables(pool: &deadpool_postgres::Pool, schemas: &[String]) -> Vec<Table> {
-    let client = pool.get().await.unwrap();
-    let tables: Vec<Table> = client
+pub async fn get_tables(
+    pool: &deadpool_postgres::Pool,
+    schemas: &[String],
+) -> Result<Vec<Table>, DbError> {
+    let client = pool.get().await.map_err(|e| DbError::Pool(e.to_string()))?;
+
+    let table_rows = client
         .query(
-            "SELECT 
-                c.oid, 
+            "SELECT
+                c.oid,
                 n.nspname AS schema_name,
                 c.relname AS table_name,
                 c.relkind::text,
@@ -43,38 +48,42 @@ pub async fn get_tables(pool: &deadpool_postgres::Pool, schemas: &[String]) -> V
             &[&schemas],
         )
         .await
-        .unwrap()
+        .map_err(|e| DbError::Query(e.to_string()))?;
+
+    let tables: Vec<Table> = table_rows
         .iter()
         .map(|r| Table::from_row(r))
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let table_oids = tables.iter().map(|t| t.oid()).collect::<Vec<&u32>>();
 
-    let columns = client
+    let column_rows = client
         .query(
-            "SELECT 
-                a.attrelid AS table_oid, 
+            "SELECT
+                a.attrelid AS table_oid,
                 a.attnum::int4 AS column_id,
-                a.attname AS column_name, 
-                a.atttypid AS type_oid, 
+                a.attname AS column_name,
+                a.atttypid AS type_oid,
                 NOT a.attnotnull AS nullable,
                 a.atthasdef AS has_default,
                 pg_catalog.col_description(a.attrelid, a.attnum) AS comment
-            FROM 
+            FROM
                 pg_catalog.pg_attribute a
-            WHERE 
+            WHERE
                 a.attrelid = ANY($1)              -- Your Table OID
-                AND a.attnum > 0 
+                AND a.attnum > 0
                 AND NOT a.attisdropped
-            ORDER BY 
+            ORDER BY
                 a.attnum;",
             &[&table_oids],
         )
         .await
-        .unwrap()
+        .map_err(|e| DbError::Query(e.to_string()))?;
+
+    let columns: Vec<Column> = column_rows
         .iter()
         .map(|r| Column::form_row(r))
-        .collect::<Vec<Column>>();
+        .collect::<Result<Vec<_>, _>>()?;
 
-    map_columns_to_table(tables, columns)
+    Ok(map_columns_to_table(tables, columns))
 }

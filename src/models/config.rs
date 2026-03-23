@@ -1,6 +1,7 @@
 /// How the library should obtain a database connection.
 ///
 /// Pass one of these variants as the `pool` field of [`Config`].
+#[derive(Debug)]
 pub enum PoolConfig {
     /// A `postgres://` (or `postgresql://`) connection string.
     ///
@@ -38,7 +39,20 @@ pub enum PoolConfig {
     Pool(deadpool_postgres::Pool),
 }
 
+impl Default for PoolConfig {
+    fn default() -> Self {
+        PoolConfig::ConnectionString(String::new())
+    }
+}
+
+#[derive(Debug)]
 pub struct WatchPg(pub String);
+
+impl WatchPg {
+    pub fn new(url: impl Into<String>) -> Self {
+        WatchPg(url.into())
+    }
+}
 
 /// Top-level configuration passed to [`crate::TurboGraph::new`] or [`crate::build_schema`].
 ///
@@ -74,6 +88,7 @@ pub struct WatchPg(pub String);
 ///     watch_pg: Some(WatchPg("postgres://user:pass@localhost:5432/mydb".into())),
 /// };
 /// ```
+#[derive(Debug, Default)]
 pub struct Config {
     /// Database connection — either a DSN or an existing pool.
     pub pool: PoolConfig,
@@ -84,4 +99,33 @@ pub struct Config {
     /// The URL is used exclusively for the LISTEN/NOTIFY connection and is
     /// independent of the [`PoolConfig`] variant used for regular queries.
     pub watch_pg: Option<WatchPg>,
+}
+
+impl Config {
+    pub fn new(pool: PoolConfig) -> Self {
+        Self {
+            pool,
+            schemas: Vec::new(),
+            watch_pg: None,
+        }
+    }
+    pub fn connection_string(mut self, url: impl Into<String>) -> Self {
+        self.pool = PoolConfig::ConnectionString(url.into());
+        self
+    }
+
+    pub fn pool(mut self, pool: deadpool_postgres::Pool) -> Self {
+        self.pool = PoolConfig::Pool(pool);
+        self
+    }
+
+    pub fn schema(mut self, schema: impl Into<String>) -> Self {
+        self.schemas.push(schema.into());
+        self
+    }
+
+    pub fn watch_pg(mut self, url: impl Into<String>) -> Self {
+        self.watch_pg = Some(WatchPg(url.into()));
+        self
+    }
 }
