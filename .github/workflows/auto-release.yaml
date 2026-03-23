@@ -85,6 +85,9 @@ jobs:
           VERSION=$(jq -r '.[] | select(.type == "result") | .result | fromjson | .version' "$EXECUTION_FILE")
           DESCRIPTION=$(jq -r '.[] | select(.type == "result") | .result | fromjson | .description' "$EXECUTION_FILE")
 
+          # remove stating "v" prefix if present
+          VERSION="${VERSION#v}"
+
           if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
             echo "❌ Could not parse version from Claude output"
             exit 1
