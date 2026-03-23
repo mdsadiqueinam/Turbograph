@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::models::table::Column;
 
-use crate::db::scalar::SqlScalar;
+use crate::db::scalar::{SqlArray, SqlScalar};
 
 pub(crate) fn get_field_value<'a>(
     column: &Column,
@@ -254,6 +254,76 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
                 None
             }
         }
+        _ => None,
+    }
+}
+
+/// Converts a Vec<SqlScalar> to SqlArray based on the column type.
+pub(crate) fn scalars_to_sql_array(ty: &Type, scalars: Vec<SqlScalar>) -> Option<SqlArray> {
+    match *ty {
+        Type::BOOL => Some(SqlArray::Bool(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Bool(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::INT2 => Some(SqlArray::Int2(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Int2(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::INT4 => Some(SqlArray::Int4(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Int4(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::INT8 => Some(SqlArray::Int8(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Int8(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::FLOAT4 => Some(SqlArray::Float4(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Float4(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::FLOAT8 => Some(SqlArray::Float8(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Float8(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::UUID => Some(SqlArray::Text(
+            scalars
+                .into_iter()
+                .filter_map(|s| match s {
+                    SqlScalar::Text(v) => Some(v),
+                    _ => None,
+                })
+                .collect(),
+        )),
         _ => None,
     }
 }
