@@ -1,13 +1,19 @@
 use regex::Regex;
 use std::sync::LazyLock;
 
-/// Convert a string to camelCase. It can handle PascalCase, snake_case, and kebab-case.
-/// Examples:
-/// - "PascalCase" -> "pascalCase"
-/// - "snake_case" -> "snakeCase"
-/// - "kebab-case" -> "kebabCase"
-///   Note: It will also handle mixed cases like "APIResponse" -> "apiResponse"
-/// - "API_Response" -> "apiResponse"
+/// Convert a string to camelCase.
+///
+/// Handles PascalCase, snake_case, and kebab-case inputs.
+///
+/// # Examples
+///
+/// ```
+/// use turbograph::utils::inflection::to_camel_case;
+/// assert_eq!(to_camel_case("PascalCase"), "pascalCase");
+/// assert_eq!(to_camel_case("snake_case"), "snakeCase");
+/// assert_eq!(to_camel_case("kebab-case"), "kebabCase");
+/// assert_eq!(to_camel_case("API_Response"), "apiResponse");
+/// ```
 pub fn to_camel_case(text: &str) -> String {
     // Insert a space before capital letters (PascalCase → Pascal Case)
     static RE_PASCAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z0-9])([A-Z])").unwrap());
@@ -49,13 +55,19 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-/// Convert a string to snake_case. It can handle PascalCase, camelCase, and kebab-case.
-/// Examples:
-/// - "PascalCase" -> "pascal_case"
-/// - "camelCase" -> "camel_case"
-/// - "kebab-case" -> "kebab_case"
-///   Note: It will also handle mixed cases like "APIResponse" -> "api_response"
-/// - "API_Response" -> "api_response"
+/// Convert a string to snake_case.
+///
+/// Handles PascalCase, camelCase, and kebab-case inputs.
+///
+/// # Examples
+///
+/// ```
+/// use turbograph::utils::inflection::to_snake_case;
+/// assert_eq!(to_snake_case("PascalCase"), "pascal_case");
+/// assert_eq!(to_snake_case("camelCase"), "camel_case");
+/// assert_eq!(to_snake_case("kebab-case"), "kebab_case");
+/// assert_eq!(to_snake_case("APIResponse"), "api_response");
+/// ```
 pub fn to_snake_case(text: &str) -> String {
     // 1. Compile Regexes only once for performance
     static RE_HYPHEN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-").unwrap());
@@ -76,19 +88,33 @@ pub fn to_snake_case(text: &str) -> String {
     res.to_lowercase()
 }
 
-/// Convert a string to PascalCase. It can handle snake_case, camelCase, and kebab-case.
-/// Examples:
-/// - "snake_case" -> "SnakeCase"
-/// - "blog_posts" -> "BlogPosts" (use with singularize for "BlogPost")
+/// Convert a string to PascalCase.
+///
+/// Handles snake_case, camelCase, and kebab-case inputs.
+///
+/// # Examples
+///
+/// ```
+/// use turbograph::utils::inflection::to_pascal_case;
+/// assert_eq!(to_pascal_case("snake_case"), "SnakeCase");
+/// assert_eq!(to_pascal_case("blog_posts"), "BlogPosts");
+/// ```
 pub fn to_pascal_case(text: &str) -> String {
     capitalize_first(&to_camel_case(text))
 }
 
-/// Convert a string to SCREAMING_SNAKE_CASE. It can handle PascalCase, camelCase, and kebab-case.
-/// Examples:
-/// - "PascalCase" -> "PASCAL_CASE"
-/// - "camelCase" -> "CAMEL_CASE"
-/// - "kebab-case" -> "KEBAB_CASE"
+/// Convert a string to SCREAMING_SNAKE_CASE.
+///
+/// Handles PascalCase, camelCase, and kebab-case inputs.
+///
+/// # Examples
+///
+/// ```
+/// use turbograph::utils::inflection::to_screaming_snake_case;
+/// assert_eq!(to_screaming_snake_case("PascalCase"), "PASCAL_CASE");
+/// assert_eq!(to_screaming_snake_case("camelCase"), "CAMEL_CASE");
+/// assert_eq!(to_screaming_snake_case("kebab-case"), "KEBAB_CASE");
+/// ```
 pub fn to_screaming_snake_case(text: &str) -> String {
     to_snake_case(text).to_uppercase()
 }

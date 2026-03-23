@@ -8,6 +8,11 @@ use crate::models::table::Column;
 
 use crate::db::scalar::{SqlArray, SqlScalar};
 
+/// Extracts the value of `column` from a JSON row and converts it to the
+/// appropriate `async_graphql` [`FieldValue`].
+///
+/// Returns `None` when the column is absent from the JSON object or its value
+/// is `null`.
 pub(crate) fn get_field_value<'a>(
     column: &Column,
     value: &serde_json::Value,
@@ -112,6 +117,11 @@ pub(crate) fn get_field_value<'a>(
     Some(field_val)
 }
 
+/// Returns the `async_graphql` [`TypeRef`] for the given column.
+///
+/// Array columns produce a list type reference; nullability is derived from
+/// [`Column::nullable`].  `INT8` is mapped to `String` because `i64` exceeds
+/// the range of GraphQL's `Int` (which is 32-bit).
 pub(crate) fn get_type_ref(column: &Column) -> TypeRef {
     let (base, is_list): (&str, bool) = match *column._type() {
         Type::BOOL => (TypeRef::BOOLEAN, false),

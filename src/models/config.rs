@@ -45,10 +45,23 @@ impl Default for PoolConfig {
     }
 }
 
+/// A PostgreSQL connection URL used exclusively for the DDL-watch
+/// `LISTEN`/`NOTIFY` connection.
+///
+/// Pass this to [`Config::watch_pg`] to enable automatic schema reloading
+/// whenever a DDL change is detected.
+///
+/// # Example
+///
+/// ```rust
+/// use turbograph::WatchPg;
+/// let w = WatchPg::new("postgres://user:pass@localhost:5432/mydb");
+/// ```
 #[derive(Debug)]
 pub struct WatchPg(pub String);
 
 impl WatchPg {
+    /// Creates a new `WatchPg` from any string-like value.
     pub fn new(url: impl Into<String>) -> Self {
         WatchPg(url.into())
     }
@@ -102,6 +115,10 @@ pub struct Config {
 }
 
 impl Config {
+    /// Creates a new `Config` with the given pool configuration.
+    ///
+    /// `schemas` defaults to an empty list (you must add at least one via
+    /// [`Config::schema`]) and `watch_pg` defaults to `None`.
     pub fn new(pool: PoolConfig) -> Self {
         Self {
             pool,
@@ -109,21 +126,37 @@ impl Config {
             watch_pg: None,
         }
     }
+
+    /// Set the database connection using a `postgres://` connection string.
+    ///
+    /// Replaces any previously set [`PoolConfig`].
     pub fn connection_string(mut self, url: impl Into<String>) -> Self {
         self.pool = PoolConfig::ConnectionString(url.into());
         self
     }
 
+    /// Set the database connection using a pre-built `deadpool_postgres::Pool`.
+    ///
+    /// Replaces any previously set [`PoolConfig`].
     pub fn pool(mut self, pool: deadpool_postgres::Pool) -> Self {
         self.pool = PoolConfig::Pool(pool);
         self
     }
 
+    /// Append a PostgreSQL schema name to the list of schemas to introspect.
+    ///
+    /// Call this once per schema.  At least one schema must be added before
+    /// calling [`TurboGraph::new`](crate::TurboGraph::new).
     pub fn schema(mut self, schema: impl Into<String>) -> Self {
         self.schemas.push(schema.into());
         self
     }
 
+    /// Enable DDL-watch mode using the given PostgreSQL connection URL.
+    ///
+    /// When set, Turbograph installs event triggers on first use and spawns a
+    /// background task that rebuilds the schema whenever a DDL notification
+    /// arrives on the `turbograph_watch` channel.
     pub fn watch_pg(mut self, url: impl Into<String>) -> Self {
         self.watch_pg = Some(WatchPg(url.into()));
         self

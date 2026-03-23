@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "postgres://postgres:secret@localhost:5432/mydb".into(),
         ),
         schemas: vec!["public".into()],
-        watch_pg: false,
+        watch_pg: None,
     })
     .await?;
 
@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 ```rust,no_run
 use axum::{Router, extract::State, response::{Html, IntoResponse}, routing::get};
-use turbograph::{Config, PoolConfig, TurboGraph};
+use turbograph::{Config, PoolConfig, TurboGraph, WatchPg};
 
 async fn graphiql() -> Html<String> {
     Html(TurboGraph::graphiql("/graphql"))
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "postgres://postgres:secret@localhost:5432/mydb".into(),
         ),
         schemas: vec!["public".into()],
-        watch_pg: true, // rebuild schema on DDL changes
+        watch_pg: Some(WatchPg("postgres://postgres:secret@localhost:5432/mydb".into())), // rebuild schema on DDL changes
     })
     .await?;
 
