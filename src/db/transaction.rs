@@ -28,7 +28,7 @@ pub async fn execute_query(
         .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
     if let Some(cfg) = tx_config.as_ref() {
-        apply_settings(&*client, cfg).await?;
+        apply_settings(&client, cfg).await?;
     }
 
     let result = client
@@ -71,7 +71,7 @@ pub async fn execute_query_with_returning(
         .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
     if let Some(cfg) = tx_config.as_ref() {
-        apply_settings(&*client, cfg).await?;
+        apply_settings(&client, cfg).await?;
     }
 
     let result = client

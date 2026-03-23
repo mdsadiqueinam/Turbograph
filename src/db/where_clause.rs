@@ -37,6 +37,7 @@ pub trait WhereBuilder {
     /// Append an `OR column op $n` condition.
     ///
     /// When `scalar` is `None`, the condition becomes `OR column IS NULL`.
+    #[allow(dead_code)]
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
 
     /// Append an `AND column = ANY($n)` condition for an array of values.
@@ -63,11 +64,13 @@ pub trait WhereBuilder {
     /// });
     /// # }
     /// ```
+    #[allow(dead_code)]
     fn where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);
 
     /// Append a grouped `OR (...)` sub-expression.
+    #[allow(dead_code)]
     fn or_where_block<F>(&mut self, block: F) -> &mut Self
     where
         F: FnOnce(&mut Self);

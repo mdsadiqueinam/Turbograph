@@ -12,8 +12,6 @@ pub mod insert;
 pub mod select;
 pub mod update;
 
-use deadpool_postgres::Pool;
-
 use super::scalar::SqlScalar;
 use super::where_clause::WhereInternal;
 
@@ -25,12 +23,10 @@ use super::where_clause::WhereInternal;
 /// [`WhereInternal`] implementation.  It is not intended for use outside this
 /// crate.
 pub(super) trait QueryBase {
-    fn table(&self) -> &str;
     fn get_where_clause(&self) -> &str;
     fn get_where_clause_mut(&mut self) -> &mut String;
     fn params(&self) -> &[SqlScalar];
     fn params_mut(&mut self) -> &mut Vec<SqlScalar>;
-    fn pool(&self) -> &Pool;
 }
 
 /// Marker trait that opts a query builder into [`WhereBuilder`](crate::db::where_clause::WhereBuilder) support.

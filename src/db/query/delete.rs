@@ -42,9 +42,6 @@ pub struct Delete {
 // ── QueryBase + SupportsWhere ─────────────────────────────────────────────────
 
 impl QueryBase for Delete {
-    fn table(&self) -> &str {
-        &self.table
-    }
     fn get_where_clause(&self) -> &str {
         &self.where_clause
     }
@@ -56,9 +53,6 @@ impl QueryBase for Delete {
     }
     fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
         &mut self.params
-    }
-    fn pool(&self) -> &Pool {
-        &self.pool
     }
 }
 
@@ -94,6 +88,7 @@ impl Delete {
     }
 
     /// Execute the delete and return the number of rows affected.
+    #[allow(dead_code)]
     pub async fn execute(&self, tx_config: Option<TransactionConfig>) -> Result<u64, DbError> {
         let query = self.get_query();
         let params = self.where_params();

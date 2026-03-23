@@ -90,9 +90,6 @@ pub struct Select<O = NoOrder> {
 // ── QueryBase ─────────────────────────────────────────────────────────────────
 
 impl<O> QueryBase for Select<O> {
-    fn table(&self) -> &str {
-        &self.table
-    }
     fn get_where_clause(&self) -> &str {
         &self.where_clause
     }
@@ -104,9 +101,6 @@ impl<O> QueryBase for Select<O> {
     }
     fn params_mut(&mut self) -> &mut Vec<SqlScalar> {
         &mut self.params
-    }
-    fn pool(&self) -> &Pool {
-        &self.pool
     }
 }
 
@@ -267,7 +261,7 @@ impl<O> Select<O> {
             .map_err(|e| DbError::Transaction(format!("BEGIN error: {e}")))?;
 
         if let Some(ref cfg) = tx_config {
-            apply_settings(&*client, cfg)
+            apply_settings(&client, cfg)
                 .await
                 .map_err(|e| DbError::Transaction(e.to_string()))?;
         }

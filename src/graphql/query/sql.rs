@@ -1,17 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_graphql::Value as GqlValue;
-use tokio_postgres::types::Type;
-
 use crate::db::operator::Op;
-use crate::db::scalar::{SqlArray, SqlScalar};
+use crate::db::scalar::SqlScalar;
 use crate::db::where_clause::WhereBuilder;
 use crate::models::table::Column;
 use crate::utils::inflection::to_screaming_snake_case;
+use async_graphql::Value as GqlValue;
 
 use super::super::filter::supports_range;
-use super::super::type_mapping::to_sql_scalar;
+use super::super::type_mapping::{scalars_to_sql_array, to_sql_scalar};
 
 use crate::error::gql_err;
 
@@ -25,55 +23,6 @@ pub(crate) fn quote_ident(name: &str) -> String {
 #[inline]
 pub(crate) fn quote_table(schema: &str, table: &str) -> String {
     format!("\"{}\".\"{}\"", schema, table)
-}
-
-/// Converts a Vec<SqlScalar> to SqlArray based on the column type.
-fn scalars_to_sql_array(ty: &Type, scalars: Vec<SqlScalar>) -> Option<SqlArray> {
-    match *ty {
-        Type::BOOL => Some(SqlArray::Bool(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Bool(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::INT2 => Some(SqlArray::Int2(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Int2(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::INT4 => Some(SqlArray::Int4(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Int4(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::INT8 => Some(SqlArray::Int8(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Int8(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::FLOAT4 => Some(SqlArray::Float4(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Float4(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::FLOAT8 => Some(SqlArray::Float8(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Float8(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        Type::TEXT | Type::VARCHAR | Type::BPCHAR => Some(SqlArray::Text(
-            scalars.into_iter().filter_map(|s| match s {
-                SqlScalar::Text(v) => Some(v),
-                _ => None,
-            }).collect(),
-        )),
-        _ => None,
-    }
 }
 
 /// Applies GraphQL condition pairs to any query builder that implements

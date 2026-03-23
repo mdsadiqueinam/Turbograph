@@ -5,8 +5,8 @@ use std::sync::LazyLock;
 /// Examples:
 /// - "PascalCase" -> "pascalCase"
 /// - "snake_case" -> "snakeCase"
-/// - "kebab-case" -> "kebabCase"   
-/// Note: It will also handle mixed cases like "APIResponse" -> "apiResponse"
+/// - "kebab-case" -> "kebabCase"
+///   Note: It will also handle mixed cases like "APIResponse" -> "apiResponse"
 /// - "API_Response" -> "apiResponse"
 pub fn to_camel_case(text: &str) -> String {
     // Insert a space before capital letters (PascalCase → Pascal Case)
@@ -54,7 +54,7 @@ fn capitalize_first(s: &str) -> String {
 /// - "PascalCase" -> "pascal_case"
 /// - "camelCase" -> "camel_case"
 /// - "kebab-case" -> "kebab_case"
-/// Note: It will also handle mixed cases like "APIResponse" -> "api_response"
+///   Note: It will also handle mixed cases like "APIResponse" -> "api_response"
 /// - "API_Response" -> "api_response"
 pub fn to_snake_case(text: &str) -> String {
     // 1. Compile Regexes only once for performance
