@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use serde_json::{Map, Value};
 use tokio_postgres::{Row, types::Type};
 use uuid::Uuid;
@@ -87,6 +87,25 @@ impl JsonExt for Row {
                 Type::TIMESTAMP => self
                     .try_get::<_, NaiveDateTime>(i)
                     .map(|v| Value::String(v.format("%Y-%m-%d:%H:%M:%S").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // DATE type - convert to NaiveDate and format as ISO date string
+                Type::DATE => self
+                    .try_get::<_, NaiveDate>(i)
+                    .map(|v| Value::String(v.format("%Y-%m-%d").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIME type - convert to NaiveTime and format as ISO time string
+                Type::TIME => self
+                    .try_get::<_, NaiveTime>(i)
+                    .map(|v| Value::String(v.format("%H:%M:%S%.f").to_string()))
+                    .unwrap_or(Value::Null),
+
+                // TIMETZ type - PostgreSQL TIME WITH TIME ZONE, chrono reads as NaiveTime
+                // (timezone offset is not preserved by chrono deserialization)
+                Type::TIMETZ => self
+                    .try_get::<_, NaiveTime>(i)
+                    .map(|v| Value::String(v.format("%H:%M:%S%.f").to_string()))
                     .unwrap_or(Value::Null),
 
                 _ => self
