@@ -254,6 +254,88 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
                 None
             }
         }
+        Type::BOOL_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let bools = values.iter().filter_map(|v| {
+                    if let GqlValue::Boolean(b) = v { Some(*b) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Bool(bools)))
+            } else {
+                None
+            }
+        }
+        Type::INT2_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let ints = values.iter().filter_map(|v| {
+                    if let GqlValue::Number(n) = v { n.as_i64().map(|n| n as i16) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Int2(ints)))
+            } else {
+                None
+            }
+        }
+        Type::INT4_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let ints = values.iter().filter_map(|v| {
+                    if let GqlValue::Number(n) = v { n.as_i64().map(|n| n as i32) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Int4(ints)))
+            } else {
+                None
+            }
+        }
+        Type::INT8_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let ints = values.iter().filter_map(|v| match v {
+                    GqlValue::Number(n) => n.as_i64(),
+                    GqlValue::String(s) => s.parse::<i64>().ok(),
+                    _ => None,
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Int8(ints)))
+            } else {
+                None
+            }
+        }
+        Type::FLOAT4_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let floats = values.iter().filter_map(|v| {
+                    if let GqlValue::Number(n) = v { n.as_f64().map(|n| n as f32) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Float4(floats)))
+            } else {
+                None
+            }
+        }
+        Type::FLOAT8_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let floats = values.iter().filter_map(|v| {
+                    if let GqlValue::Number(n) = v { n.as_f64() } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Float8(floats)))
+            } else {
+                None
+            }
+        }
+        Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let texts = values.iter().filter_map(|v| {
+                    if let GqlValue::String(s) = v { Some(s.clone()) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Text(texts)))
+            } else {
+                None
+            }
+        }
+        Type::UUID_ARRAY => {
+            if let GqlValue::List(values) = val {
+                let texts = values.iter().filter_map(|v| {
+                    if let GqlValue::String(s) = v { Some(s.clone()) } else { None }
+                }).collect();
+                Some(SqlScalar::Array(SqlArray::Text(texts)))
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -703,5 +785,49 @@ mod tests {
         let val = GqlValue::String("550e8400-e29b-41d4-a716-446655440000".to_string());
         let result = to_sql_scalar(&col, &val);
         assert!(matches!(result, Some(SqlScalar::Uuid(_))));
+    }
+
+    #[test]
+    fn test_to_sql_scalar_bool_array() {
+        let col = Column::new_for_test("flags", Type::BOOL_ARRAY, false, false);
+        let val = GqlValue::List(vec![
+            GqlValue::Boolean(true),
+            GqlValue::Boolean(false),
+            GqlValue::Boolean(true),
+        ]);
+        let result = to_sql_scalar(&col, &val);
+        assert!(matches!(result, Some(SqlScalar::Array(SqlArray::Bool(_)))));
+        if let Some(SqlScalar::Array(SqlArray::Bool(bools))) = result {
+            assert_eq!(bools, vec![true, false, true]);
+        }
+    }
+
+    #[test]
+    fn test_to_sql_scalar_int4_array() {
+        let col = Column::new_for_test("ids", Type::INT4_ARRAY, false, false);
+        let val = GqlValue::List(vec![
+            GqlValue::Number(serde_json::Number::from(1_i64)),
+            GqlValue::Number(serde_json::Number::from(2_i64)),
+            GqlValue::Number(serde_json::Number::from(3_i64)),
+        ]);
+        let result = to_sql_scalar(&col, &val);
+        assert!(matches!(result, Some(SqlScalar::Array(SqlArray::Int4(_)))));
+        if let Some(SqlScalar::Array(SqlArray::Int4(ints))) = result {
+            assert_eq!(ints, vec![1, 2, 3]);
+        }
+    }
+
+    #[test]
+    fn test_to_sql_scalar_text_array() {
+        let col = Column::new_for_test("tags", Type::TEXT_ARRAY, false, false);
+        let val = GqlValue::List(vec![
+            GqlValue::String("rust".to_string()),
+            GqlValue::String("graphql".to_string()),
+        ]);
+        let result = to_sql_scalar(&col, &val);
+        assert!(matches!(result, Some(SqlScalar::Array(SqlArray::Text(_)))));
+        if let Some(SqlScalar::Array(SqlArray::Text(texts))) = result {
+            assert_eq!(texts, vec!["rust", "graphql"]);
+        }
     }
 }
