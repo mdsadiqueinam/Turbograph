@@ -28,9 +28,6 @@ impl JsonExt for Row {
             let name = col.name().to_string();
 
             let type_ = col.type_().clone();
-            if name == "id" || name == "price" || name == "name" {
-                eprintln!("DEBUG column: name={}, type={:?}", name, type_);
-            }
             let value = match type_ {
                 Type::BOOL => self
                     .try_get::<_, bool>(i)
@@ -59,7 +56,7 @@ impl JsonExt for Row {
                     .map(Value::Number)
                     .unwrap_or(Value::Null),
 
-                Type::FLOAT8 => self
+                Type::FLOAT8 | Type::NUMERIC => self
                     .try_get::<usize, f64>(i)
                     .ok()
                     .and_then(serde_json::Number::from_f64)
@@ -73,16 +70,10 @@ impl JsonExt for Row {
 
                 Type::JSON | Type::JSONB => self.try_get::<usize, Value>(i).unwrap_or(Value::Null),
 
-                // UUID type (OID 2950)
+                // UUID type
                 Type::UUID => self
                     .try_get::<_, Uuid>(i)
                     .map(|v| Value::String(v.to_string()))
-                    .unwrap_or(Value::Null),
-
-                // NUMERIC type (OID 1700)
-                Type::NUMERIC => self
-                    .try_get::<_, String>(i)
-                    .map(Value::String)
                     .unwrap_or(Value::Null),
 
                 _ => self

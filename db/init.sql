@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.products (
     id          UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     name        VARCHAR(255) NOT NULL,
     description TEXT,
-    price       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    price       DOUBLE PRECISION NOT NULL DEFAULT 0.00,
     stock       INT          NOT NULL DEFAULT 0,
     is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()

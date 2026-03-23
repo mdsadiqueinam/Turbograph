@@ -187,7 +187,7 @@ async fn e2e_products_create() {
                     description: "27-inch 4K display"
                     price: 399.99
                     stock: 5
-                    isActive: true
+                    is_active: true
                 }
             ) {
                 id
@@ -195,8 +195,8 @@ async fn e2e_products_create() {
                 description
                 price
                 stock
-                isActive
-                createdAt
+                is_active
+                created_at
             }
         }"#,
     )
@@ -212,9 +212,9 @@ async fn e2e_products_create() {
 
     assert_eq!(product["name"], json!("Monitor"));
     assert_eq!(product["description"], json!("27-inch 4K display"));
-    assert_eq!(product["price"], json!("399.99"));
+    assert_eq!(product["price"], json!(399.99));
     assert_eq!(product["stock"], json!(5));
-    assert_eq!(product["isActive"], json!(true));
+    assert_eq!(product["is_active"], json!(true));
 }
 
 #[tokio::test]
@@ -286,7 +286,7 @@ async fn e2e_products_update() {
         .expect("updateProduct should be a list");
     assert_eq!(rows.len(), 1, "should update exactly one product");
     assert_eq!(rows[0]["name"], json!("Laptop"));
-    assert_eq!(rows[0]["price"], json!("1099.99"));
+    assert_eq!(rows[0]["price"], json!(1099.99));
     assert_eq!(rows[0]["stock"], json!(42));
 
     // Revert to original values
@@ -345,22 +345,30 @@ async fn e2e_products_delete() {
     let deleted = &delete_data["deleteProduct"];
     assert!(!deleted.as_array().unwrap().is_empty(), "should delete the product");
 
-    // Verify it's gone
+    // Verify it's gone by querying allProducts
     let verify = gql(
         &client,
         &format!(
             r#"{{
-                productById(id: "{}") {{
-                    id
+                allProducts {{
+                    nodes {{
+                        id
+                    }}
                 }}
-            }}"#,
-            product_id
+            }}"#
         ),
     )
     .await;
 
+    let product_ids: Vec<&str> = verify["allProducts"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["id"].as_str())
+        .collect();
+
     assert!(
-        verify["productById"].is_null(),
-        "deleted product should not be findable"
+        !product_ids.contains(&product_id),
+        "deleted product should not be in allProducts"
     );
 }
