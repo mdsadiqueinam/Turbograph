@@ -7,7 +7,9 @@ use tokio_postgres::types::Type;
 
 use super::connection::{ConnectionPayload, EdgePayload};
 use crate::graphql::condition_type_ref;
-use crate::utils::inflection::{singularize, to_pascal_case, to_screaming_snake_case};
+use crate::utils::inflection::{
+    singularize, to_camel_case, to_pascal_case, to_screaming_snake_case,
+};
 
 /// Controls which CRUD operations should be generated for a table or column.
 ///
@@ -137,6 +139,11 @@ impl Column {
     /// The column name as it appears in `pg_attribute.attname`.
     pub fn name(&self) -> &String {
         &self.name
+    }
+
+    // The camelCase field name derived from the column name, used in GraphQL types and inputs.
+    pub fn field_name(&self) -> String {
+        to_camel_case(self.name())
     }
 
     /// The PostgreSQL data type of this column.
@@ -435,7 +442,7 @@ impl Table {
                 if condition_type_ref(col).is_some() {
                     let filter_name = self.generate_condition_filter_type_name(col);
                     obj.field(InputValue::new(
-                        col.name().as_str(),
+                        col.field_name(),
                         TypeRef::named(filter_name),
                     ))
                 } else {
@@ -450,37 +457,37 @@ impl Table {
     /// Non-nullable columns without a default value are required fields;
     /// all others are optional.
     pub fn create_type(&self) -> InputObject {
-        self.columns()
-            .iter()
-            .filter(|c| !c.omit_create())
-            .fold(InputObject::new(self.create_type_name()), |obj, col| {
+        self.columns().iter().filter(|c| !c.omit_create()).fold(
+            InputObject::new(self.create_type_name()),
+            |obj, col| {
                 if let Some(tr) = condition_type_ref(col) {
                     let type_ref: TypeRef = if !col.nullable() && !col.has_default() {
                         TypeRef::named_nn(tr.to_string())
                     } else {
                         tr
                     };
-                    obj.field(InputValue::new(col.name().as_str(), type_ref))
+                    obj.field(InputValue::new(col.field_name(), type_ref))
                 } else {
                     obj
                 }
-            })
+            },
+        )
     }
 
     /// Builds the GraphQL `UpdateXxxPatch` input type for this table.
     ///
     /// All fields are optional so that callers can perform partial updates.
     pub fn update_type(&self) -> InputObject {
-        self.columns()
-            .iter()
-            .filter(|c| !c.omit_update())
-            .fold(InputObject::new(self.update_type_name()), |obj, col| {
+        self.columns().iter().filter(|c| !c.omit_update()).fold(
+            InputObject::new(self.update_type_name()),
+            |obj, col| {
                 if let Some(tr) = condition_type_ref(col) {
-                    obj.field(InputValue::new(col.name().as_str(), tr))
+                    obj.field(InputValue::new(col.field_name(), tr))
                 } else {
                     obj
                 }
-            })
+            },
+        )
     }
 
     /// Builds the per-column filter input type for `column` (e.g. `UserEmailFilter`).

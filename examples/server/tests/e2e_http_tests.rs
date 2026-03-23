@@ -187,7 +187,7 @@ async fn e2e_products_create() {
                     description: "27-inch 4K display"
                     price: 399.99
                     stock: 5
-                    is_active: true
+                    isActive: true
                 }
             ) {
                 id
@@ -195,8 +195,8 @@ async fn e2e_products_create() {
                 description
                 price
                 stock
-                is_active
-                created_at
+                isActive
+                createdAt
             }
         }"#,
     )
@@ -214,7 +214,7 @@ async fn e2e_products_create() {
     assert_eq!(product["description"], json!("27-inch 4K display"));
     assert_eq!(product["price"], json!(399.99));
     assert_eq!(product["stock"], json!(5));
-    assert_eq!(product["is_active"], json!(true));
+    assert_eq!(product["isActive"], json!(true));
 }
 
 #[tokio::test]
