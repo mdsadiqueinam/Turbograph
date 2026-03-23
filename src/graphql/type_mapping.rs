@@ -256,9 +256,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::BOOL_ARRAY => {
             if let GqlValue::List(values) = val {
-                let bools = values.iter().filter_map(|v| {
-                    if let GqlValue::Boolean(b) = v { Some(*b) } else { None }
-                }).collect();
+                let bools = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Boolean(b) = v {
+                            Some(*b)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Bool(bools)))
             } else {
                 None
@@ -266,9 +273,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::INT2_ARRAY => {
             if let GqlValue::List(values) = val {
-                let ints = values.iter().filter_map(|v| {
-                    if let GqlValue::Number(n) = v { n.as_i64().map(|n| n as i16) } else { None }
-                }).collect();
+                let ints = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Number(n) = v {
+                            n.as_i64().map(|n| n as i16)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Int2(ints)))
             } else {
                 None
@@ -276,9 +290,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::INT4_ARRAY => {
             if let GqlValue::List(values) = val {
-                let ints = values.iter().filter_map(|v| {
-                    if let GqlValue::Number(n) = v { n.as_i64().map(|n| n as i32) } else { None }
-                }).collect();
+                let ints = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Number(n) = v {
+                            n.as_i64().map(|n| n as i32)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Int4(ints)))
             } else {
                 None
@@ -286,11 +307,14 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::INT8_ARRAY => {
             if let GqlValue::List(values) = val {
-                let ints = values.iter().filter_map(|v| match v {
-                    GqlValue::Number(n) => n.as_i64(),
-                    GqlValue::String(s) => s.parse::<i64>().ok(),
-                    _ => None,
-                }).collect();
+                let ints = values
+                    .iter()
+                    .filter_map(|v| match v {
+                        GqlValue::Number(n) => n.as_i64(),
+                        GqlValue::String(s) => s.parse::<i64>().ok(),
+                        _ => None,
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Int8(ints)))
             } else {
                 None
@@ -298,9 +322,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::FLOAT4_ARRAY => {
             if let GqlValue::List(values) = val {
-                let floats = values.iter().filter_map(|v| {
-                    if let GqlValue::Number(n) = v { n.as_f64().map(|n| n as f32) } else { None }
-                }).collect();
+                let floats = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Number(n) = v {
+                            n.as_f64().map(|n| n as f32)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Float4(floats)))
             } else {
                 None
@@ -308,9 +339,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::FLOAT8_ARRAY => {
             if let GqlValue::List(values) = val {
-                let floats = values.iter().filter_map(|v| {
-                    if let GqlValue::Number(n) = v { n.as_f64() } else { None }
-                }).collect();
+                let floats = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::Number(n) = v {
+                            n.as_f64()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Float8(floats)))
             } else {
                 None
@@ -318,9 +356,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::TEXT_ARRAY | Type::VARCHAR_ARRAY | Type::BPCHAR_ARRAY => {
             if let GqlValue::List(values) = val {
-                let texts = values.iter().filter_map(|v| {
-                    if let GqlValue::String(s) = v { Some(s.clone()) } else { None }
-                }).collect();
+                let texts = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Text(texts)))
             } else {
                 None
@@ -328,9 +373,16 @@ pub(crate) fn to_sql_scalar(column: &Column, val: &GqlValue) -> Option<SqlScalar
         }
         Type::UUID_ARRAY => {
             if let GqlValue::List(values) = val {
-                let texts = values.iter().filter_map(|v| {
-                    if let GqlValue::String(s) = v { Some(s.clone()) } else { None }
-                }).collect();
+                let texts = values
+                    .iter()
+                    .filter_map(|v| {
+                        if let GqlValue::String(s) = v {
+                            Some(s.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 Some(SqlScalar::Array(SqlArray::Text(texts)))
             } else {
                 None
