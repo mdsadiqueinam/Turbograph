@@ -4,19 +4,15 @@ use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, TypeRef};
 use deadpool_postgres::Pool;
 
-use crate::db::error::DbError;
 use crate::db::pool::PoolExt;
 use crate::db::query::select::OrderDirection;
+use crate::error::db_err_to_gql;
 use crate::models::table::Table;
 use crate::models::transaction::TransactionConfig;
 use crate::utils::inflection::to_pascal_case;
 
 mod executor;
 pub(crate) mod sql;
-
-fn db_err_to_gql(err: DbError) -> async_graphql::Error {
-    async_graphql::Error::new(err.to_string())
-}
 
 /// Generates a root Query field (e.g. `allUsers`) with Turbograph-style
 /// filtering arguments:
