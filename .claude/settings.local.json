@@ -5,7 +5,9 @@
       "Bash(cargo run:*)",
       "Bash(cargo build:*)",
       "Bash(curl *)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   },
   "sandbox": {
