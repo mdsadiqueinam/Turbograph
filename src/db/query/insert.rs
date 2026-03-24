@@ -162,9 +162,8 @@ impl Insert {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::pool::PoolExt;
-
     use super::*;
+    use crate::db::pool::PoolExt;
 
     fn test_pool() -> Pool {
         let cfg = deadpool_postgres::Config {

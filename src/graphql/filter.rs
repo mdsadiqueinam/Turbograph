@@ -1,26 +1,4 @@
-use tokio_postgres::types::Type;
-
-/// Returns `true` when `column_type` supports the range filter operators
-/// (`greaterThan`, `greaterThanEqual`, `lessThan`, `lessThanEqual`) in the
-/// generated GraphQL schema.
-///
-/// Only numeric and date/time types qualify.  `TIMETZ` is intentionally
-/// excluded because `tokio_postgres` has no `ToSql` implementation for it.
-pub fn supports_range(column_type: &Type) -> bool {
-    matches!(
-        *column_type,
-        Type::INT2
-            | Type::INT4
-            | Type::INT8
-            | Type::FLOAT4
-            | Type::FLOAT8
-            | Type::NUMERIC
-            | Type::DATE
-            | Type::TIME
-            | Type::TIMESTAMP
-            | Type::TIMESTAMPTZ
-    )
-}
+pub use crate::models::table::supports_range;
 
 #[cfg(test)]
 mod tests {

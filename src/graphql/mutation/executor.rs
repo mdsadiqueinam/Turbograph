@@ -5,18 +5,14 @@ use async_graphql::Value as GqlValue;
 use async_graphql::dynamic::FieldValue;
 use deadpool_postgres::Pool;
 
-use crate::db::error::DbError;
 use crate::db::pool::PoolExt;
 use crate::db::{JsonExt, JsonListExt};
+use crate::error::db_err_to_gql;
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
 use super::super::query::sql::{apply_gql_conditions, quote_ident, quote_table};
 use super::super::type_mapping::{condition_type_ref, to_sql_scalar};
-
-fn db_err_to_gql(err: DbError) -> async_graphql::Error {
-    async_graphql::Error::new(err.to_string())
-}
 
 /// INSERT … RETURNING *  →  single entity (or null if no columns provided).
 pub(super) async fn execute_create(

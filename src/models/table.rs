@@ -146,7 +146,8 @@ impl Column {
         let comment = row
             .try_get::<_, String>(6)
             .unwrap_or_else(|_| "".to_string());
-        let data_type = Type::from_oid(type_oid).expect("Data type is not supported");
+        let data_type = Type::from_oid(type_oid)
+            .ok_or_else(|| crate::db::error::DbError::Query(format!("Unsupported data type OID: {type_oid}")))?;
         let omit = Omit::new(&comment);
 
         Ok(Self {
