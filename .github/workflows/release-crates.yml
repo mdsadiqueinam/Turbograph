@@ -21,6 +21,9 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Generate lockfile for locked publish
+        run: cargo generate-lockfile
+
       - name: Verify tag matches crate version
         run: |
           TAG_VERSION="${{ github.event.release.tag_name }}"
