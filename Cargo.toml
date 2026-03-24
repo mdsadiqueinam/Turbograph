@@ -8,6 +8,7 @@ edition = "2024"
 description = "Automatic GraphQL API generation from PostgreSQL schemas in Rust"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/mdsadiqueinam/Turbograph"
 
 [dependencies]
 thiserror = "2"
