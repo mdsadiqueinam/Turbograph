@@ -12,6 +12,12 @@ use crate::db::transaction::{execute_query, execute_query_with_returning};
 
 use super::QueryBase;
 
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+fn quote_ident(name: &str) -> String {
+    format!("\"{name}\"")
+}
+
 // ── Insert struct ─────────────────────────────────────────────────────────────
 // Insert does NOT implement SupportsWhere — no WHERE clause on inserts.
 
@@ -40,6 +46,7 @@ use super::QueryBase;
 /// # Ok(()) }
 /// ```
 pub struct Insert {
+    schema: Option<String>,
     table: String,
     params: Vec<SqlScalar>,
     pool: Pool,
@@ -71,11 +78,38 @@ impl QueryBase for Insert {
 impl Insert {
     pub fn new(table: &str, pool: Pool) -> Self {
         Self {
+            schema: None,
             table: table.to_string(),
             params: Vec::new(),
             pool,
             values: Vec::new(),
         }
+    }
+
+    /// Returns the fully-qualified, quoted table reference: `"schema"."table"` or
+    /// just `"table"` if no schema is set.
+    fn table_ref(&self) -> String {
+        match &self.schema {
+            Some(schema) => format!("\"{}\".\"{}\"", schema, self.table),
+            None => format!("\"{}\"", self.table),
+        }
+    }
+
+    /// Set the schema for this query. This allows queries like
+    /// `INSERT INTO "schema"."table" ...`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use turbograph::db::pool::PoolExt;
+    /// # async fn example(pool: deadpool_postgres::Pool) {
+    /// let mut q = pool.insert("users").schema("public");
+    /// // SQL: INSERT INTO "public"."users" ...
+    /// # }
+    /// ```
+    pub fn schema(mut self, schema: &str) -> Self {
+        self.schema = Some(schema.to_string());
+        self
     }
 
     /// Add a row of values to insert.
@@ -106,17 +140,18 @@ impl Insert {
 
     /// Returns the full `INSERT INTO … VALUES …` SQL string.
     pub fn get_query(&self) -> String {
+        let table_ref = self.table_ref();
         if self.values.is_empty() {
-            format!("INSERT INTO {} DEFAULT VALUES", self.table)
+            format!("INSERT INTO {table_ref} DEFAULT VALUES")
         } else {
             let columns = self.columns();
             let col_list = columns
                 .iter()
-                .map(|c| c.as_str())
+                .map(|c| quote_ident(c))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            let mut q = format!("INSERT INTO {} ({col_list}) VALUES ", self.table);
+            let mut q = format!("INSERT INTO {table_ref} ({col_list}) VALUES ");
             let num_cols = columns.len();
             let mut param_idx = 1;
 
@@ -181,7 +216,7 @@ mod tests {
     fn test_insert_default_values() {
         let pool = test_pool();
         let q = pool.insert("users");
-        assert_eq!(q.get_query(), "INSERT INTO users DEFAULT VALUES");
+        assert_eq!(q.get_query(), "INSERT INTO \"users\" DEFAULT VALUES");
     }
 
     #[test]
@@ -194,7 +229,7 @@ mod tests {
         q.values(row);
 
         let sql = q.get_query();
-        assert!(sql.starts_with("INSERT INTO users ("));
+        assert!(sql.starts_with("INSERT INTO \"users\" ("));
         assert!(sql.contains("VALUES"));
         assert!(sql.contains("$1"));
         assert!(sql.contains("$2"));
@@ -222,7 +257,7 @@ mod tests {
     #[test]
     fn test_insert_schema_qualified() {
         let pool = test_pool();
-        let q = pool.insert("public.users");
-        assert!(q.get_query().contains("public.users"));
+        let q = pool.insert("users").schema("public");
+        assert!(q.get_query().contains("\"public\".\"users\""));
     }
 }

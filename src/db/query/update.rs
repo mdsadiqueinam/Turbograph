@@ -12,6 +12,12 @@ use crate::db::transaction::{execute_query, execute_query_with_returning};
 
 use super::{QueryBase, SupportsWhere};
 
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+fn quote_ident(name: &str) -> String {
+    format!("\"{name}\"")
+}
+
 // ── Update struct ─────────────────────────────────────────────────────────────
 
 /// SQL `UPDATE` query builder.
@@ -40,6 +46,7 @@ use super::{QueryBase, SupportsWhere};
 /// # Ok(()) }
 /// ```
 pub struct Update {
+    schema: Option<String>,
     table: String,
     params: Vec<SqlScalar>,
     where_clause: String,
@@ -71,6 +78,7 @@ impl SupportsWhere for Update {}
 impl Update {
     pub fn new(table: &str, pool: Pool) -> Self {
         Self {
+            schema: None,
             table: table.to_string(),
             params: Vec::new(),
             where_clause: String::new(),
@@ -79,9 +87,35 @@ impl Update {
         }
     }
 
+    /// Returns the fully-qualified, quoted table reference: `"schema"."table"` or
+    /// just `"table"` if no schema is set.
+    fn table_ref(&self) -> String {
+        match &self.schema {
+            Some(schema) => format!("\"{}\".\"{}\"", schema, self.table),
+            None => format!("\"{}\"", self.table),
+        }
+    }
+
+    /// Set the schema for this query. This allows queries like
+    /// `UPDATE "schema"."table" ...`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use turbograph::db::pool::PoolExt;
+    /// # async fn example(pool: deadpool_postgres::Pool) {
+    /// let mut q = pool.update("users").schema("public");
+    /// // SQL: UPDATE "public"."users" ...
+    /// # }
+    /// ```
+    pub fn schema(mut self, schema: &str) -> Self {
+        self.schema = Some(schema.to_string());
+        self
+    }
+
     /// Set a column to a value. These become the `SET col=$N` assignments.
     pub fn set(&mut self, column: &str, value: Option<SqlScalar>) -> &mut Self {
-        self.values.insert(column.to_string(), value);
+        self.values.insert(quote_ident(column), value);
         self
     }
 
@@ -104,7 +138,8 @@ impl Update {
     /// `WHERE` parameter indices are automatically shifted to account for the
     /// `SET` parameters that precede them.
     pub fn get_query(&self) -> String {
-        let mut q = format!("UPDATE {}", self.table);
+        let table_ref = self.table_ref();
+        let mut q = format!("UPDATE {table_ref}");
 
         // Build SET clause: SET col1=$1, col2=$2, ...
         if !self.values.is_empty() {
@@ -208,7 +243,7 @@ mod tests {
     fn test_update_simple() {
         let pool = test_pool();
         let q = pool.update("users");
-        assert_eq!(q.get_query(), "UPDATE users");
+        assert_eq!(q.get_query(), "UPDATE \"users\"");
     }
 
     #[test]
@@ -217,8 +252,8 @@ mod tests {
         let mut q = pool.update("users");
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         let sql = q.get_query();
-        assert!(sql.starts_with("UPDATE users SET"));
-        assert!(sql.contains("name = $1"));
+        assert!(sql.starts_with("UPDATE \"users\" SET"));
+        assert!(sql.contains("\"name\" = $1"));
     }
 
     #[test]
@@ -228,8 +263,8 @@ mod tests {
         q.set("name", Some(SqlScalar::Text("Alice".into())));
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(5)));
         let sql = q.get_query();
-        assert!(sql.contains("UPDATE users SET"));
-        assert!(sql.contains("name = $1"));
+        assert!(sql.contains("UPDATE \"users\" SET"));
+        assert!(sql.contains("\"name\" = $1"));
         assert!(sql.contains("WHERE"));
         // WHERE param should be shifted: $1 in where_clause becomes $2
         assert!(sql.contains("$2"));

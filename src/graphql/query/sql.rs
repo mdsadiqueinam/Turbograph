@@ -13,18 +13,6 @@ use super::super::type_mapping::{scalars_to_sql_array, to_sql_scalar};
 
 use crate::error::gql_err;
 
-/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
-#[inline]
-pub(crate) fn quote_ident(name: &str) -> String {
-    format!("\"{}\"", name)
-}
-
-/// Builds a schema-qualified table reference: `"schema"."table"`.
-#[inline]
-pub(crate) fn quote_table(schema: &str, table: &str) -> String {
-    format!("\"{}\".\"{}\"", schema, table)
-}
-
 /// Applies GraphQL condition pairs to any query builder that implements
 /// [`WhereBuilder`].  Handles simple equality, operator objects
 /// (`equal`, `greaterThan`, …) and `in` lists.
@@ -44,11 +32,10 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
             continue;
         };
         let col = &columns[col_idx];
-        let quoted = quote_ident(col.name());
 
         if !matches!(gql_val, GqlValue::Object(_)) {
             if let Some(scalar) = to_sql_scalar(col, &gql_val) {
-                builder.where_clause(&quoted, Op::Eq, Some(scalar));
+                builder.where_clause(col.name(), Op::Eq, Some(scalar));
             }
             continue;
         }
@@ -69,7 +56,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
                             .filter_map(|val| to_sql_scalar(col, &val))
                             .collect();
                         if let Some(sql_array) = scalars_to_sql_array(col._type(), scalars) {
-                            builder.where_in(&quoted, sql_array);
+                            builder.where_in(col.name(), sql_array);
                         }
                     }
                     continue;
@@ -82,7 +69,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
                 let op = filter_op;
 
                 if let Some(scalar) = to_sql_scalar(col, &op_val) {
-                    builder.where_clause(&quoted, op, Some(scalar));
+                    builder.where_clause(col.name(), op, Some(scalar));
                 }
             }
         }
@@ -91,7 +78,7 @@ pub(crate) fn apply_gql_conditions<T: WhereBuilder>(
 }
 
 /// Parses a list of GraphQL `orderBy` enum values (e.g. `["NAME_ASC", "ID_DESC"]`)
-/// and returns a list of `(quoted_column, direction)` pairs.
+/// and returns a list of `(column_name, direction)` pairs.
 pub(super) fn parse_order_by(
     order_by: &[String],
     columns: &[Arc<Column>],
@@ -118,7 +105,7 @@ pub(super) fn parse_order_by(
         let Some(&col_idx) = col_by_upper.get(col_upper) else {
             return Err(gql_err(format!("unknown column for ordering: {col_upper}")));
         };
-        result.push((quote_ident(columns[col_idx].name()), dir));
+        result.push((columns[col_idx].name().to_string(), dir));
     }
     Ok(result)
 }

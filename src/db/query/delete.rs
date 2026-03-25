@@ -33,6 +33,7 @@ use super::{QueryBase, SupportsWhere};
 /// # Ok(()) }
 /// ```
 pub struct Delete {
+    schema: Option<String>,
     table: String,
     params: Vec<SqlScalar>,
     where_clause: String,
@@ -63,11 +64,38 @@ impl SupportsWhere for Delete {}
 impl Delete {
     pub fn new(table: &str, pool: Pool) -> Self {
         Self {
+            schema: None,
             table: table.to_string(),
             params: Vec::new(),
             where_clause: String::new(),
             pool,
         }
+    }
+
+    /// Returns the fully-qualified, quoted table reference: `"schema"."table"` or
+    /// just `"table"` if no schema is set.
+    fn table_ref(&self) -> String {
+        match &self.schema {
+            Some(schema) => format!("\"{}\".\"{}\"", schema, self.table),
+            None => format!("\"{}\"", self.table),
+        }
+    }
+
+    /// Set the schema for this query. This allows queries like
+    /// `DELETE FROM "schema"."table" ...`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use turbograph::db::pool::PoolExt;
+    /// # async fn example(pool: deadpool_postgres::Pool) {
+    /// let mut q = pool.delete("users").schema("public");
+    /// // SQL: DELETE FROM "public"."users" ...
+    /// # }
+    /// ```
+    pub fn schema(mut self, schema: &str) -> Self {
+        self.schema = Some(schema.to_string());
+        self
     }
 
     /// Returns the `WHERE`-clause parameters as trait objects.
@@ -80,10 +108,11 @@ impl Delete {
 
     /// Returns the full `DELETE FROM … [WHERE …]` SQL string.
     pub fn get_query(&self) -> String {
+        let table_ref = self.table_ref();
         if self.where_clause.is_empty() {
-            format!("DELETE FROM {}", self.table)
+            format!("DELETE FROM {table_ref}")
         } else {
-            format!("DELETE FROM {}{}", self.table, self.where_clause)
+            format!("DELETE FROM {table_ref}{}", self.where_clause)
         }
     }
 
@@ -132,7 +161,7 @@ mod tests {
     fn test_delete_simple() {
         let pool = test_pool();
         let q = pool.delete("users");
-        assert_eq!(q.get_query(), "DELETE FROM users");
+        assert_eq!(q.get_query(), "DELETE FROM \"users\"");
     }
 
     #[test]
@@ -141,7 +170,7 @@ mod tests {
         let mut q = pool.delete("users");
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(1)));
         let sql = q.get_query();
-        assert!(sql.starts_with("DELETE FROM users"));
+        assert!(sql.starts_with("DELETE FROM \"users\""));
         assert!(sql.contains("WHERE"));
         assert!(sql.contains("$1"));
     }
@@ -157,7 +186,7 @@ mod tests {
         q.where_clause("status", Op::Eq, Some(SqlScalar::Text("expired".into())));
 
         let sql = q.get_query();
-        assert!(sql.starts_with("DELETE FROM sessions"));
+        assert!(sql.starts_with("DELETE FROM \"sessions\""));
         assert!(sql.contains("WHERE"));
         assert!(sql.contains("("));
         assert!(sql.contains("OR"));
@@ -167,7 +196,7 @@ mod tests {
     #[test]
     fn test_delete_schema_qualified() {
         let pool = test_pool();
-        let q = pool.delete("public.logs");
-        assert!(q.get_query().contains("public.logs"));
+        let q = pool.delete("logs").schema("public");
+        assert!(q.get_query().contains("\"public\".\"logs\""));
     }
 }

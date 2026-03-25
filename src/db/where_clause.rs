@@ -1,6 +1,12 @@
 use super::operator::Op;
 use super::scalar::{SqlArray, SqlScalar};
 
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+fn quote_ident(name: &str) -> String {
+    format!("\"{name}\"")
+}
+
 /// Public API for building SQL `WHERE` clauses incrementally.
 ///
 /// Methods append conditions to the query using `AND` by default.  Use the
@@ -32,6 +38,8 @@ pub trait WhereBuilder {
     ///
     /// When `scalar` is `None`, the condition becomes `column IS NULL`
     /// (no parameter is added).
+    ///
+    /// The column name is automatically quoted using double quotes.
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
 
     /// Append an `OR column op $n` condition.
@@ -41,6 +49,8 @@ pub trait WhereBuilder {
     fn or_where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self;
 
     /// Append an `AND column = ANY($n)` condition for an array of values.
+    ///
+    /// The column name is automatically quoted using double quotes.
     fn where_in(&mut self, column: &str, scalars: SqlArray) -> &mut Self;
 
     /// Append a grouped `AND (...)` sub-expression.
@@ -108,13 +118,14 @@ pub(super) trait WhereInternal {
 
 impl<T: WhereInternal> WhereBuilder for T {
     fn where_clause(&mut self, column: &str, op: Op, scalar: Option<SqlScalar>) -> &mut Self {
+        let quoted = quote_ident(column);
         if let Some(scalar) = scalar {
             let param_num = self.push_param(scalar);
             let operator_str = op.sql_operator();
-            self.push_query_with_logical_sep(format!(" {column} {operator_str} ${param_num}"));
+            self.push_query_with_logical_sep(format!(" {quoted} {operator_str} ${param_num}"));
         } else {
             // NULL check - no parameter needed
-            self.push_query_with_logical_sep(format!(" {column} IS NULL"));
+            self.push_query_with_logical_sep(format!(" {quoted} IS NULL"));
         }
         self
     }
@@ -127,8 +138,9 @@ impl<T: WhereInternal> WhereBuilder for T {
     }
 
     fn where_in(&mut self, column: &str, scalars: SqlArray) -> &mut Self {
+        let quoted = quote_ident(column);
         let param_num = self.push_param(SqlScalar::Array(scalars));
-        self.push_query_with_logical_sep(format!(" {column} = ANY(${param_num})"));
+        self.push_query_with_logical_sep(format!(" {quoted} = ANY(${param_num})"));
         self
     }
 

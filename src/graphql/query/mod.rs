@@ -69,8 +69,7 @@ pub fn generate_query(table: Arc<Table>, pool: Arc<Pool>) -> Field {
             let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
             FieldFuture::new(async move {
-                let table_ref = sql::quote_table(&tbl_schema, &tbl_name);
-                let mut select = pool.select(&table_ref);
+                let mut select = pool.select(&tbl_name).schema(&tbl_schema);
 
                 if let Some(pairs) = condition_pairs {
                     sql::apply_gql_conditions(&mut select, pairs, &columns)?;
@@ -198,12 +197,10 @@ pub fn generate_query_by_id(table: Arc<Table>, pool: Arc<Pool>) -> Option<Field>
         let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
         FieldFuture::new(async move {
-            let table_ref = sql::quote_table(&tbl_schema, &tbl_name);
-            let mut select = pool.select(&table_ref);
+            let mut select = pool.select(&tbl_name).schema(&tbl_schema);
 
             // Apply equality filters for each PK column
             for col in &pk_columns {
-                let quoted = sql::quote_ident(col.name());
                 let arg_val = ctx.args.get(&col.field_name()).ok_or_else(|| {
                     db_err_to_gql(crate::db::error::DbError::Query(format!(
                         "argument {} not found",
@@ -212,7 +209,7 @@ pub fn generate_query_by_id(table: Arc<Table>, pool: Arc<Pool>) -> Option<Field>
                 })?;
                 let gql_val: &async_graphql::Value = arg_val.as_value();
                 if let Some(sql_scalar) = to_sql_scalar(col, gql_val) {
-                    select.where_clause(&quoted, Op::Eq, Some(sql_scalar));
+                    select.where_clause(col.name(), Op::Eq, Some(sql_scalar));
                 }
             }
 

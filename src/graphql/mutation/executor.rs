@@ -11,7 +11,7 @@ use crate::error::db_err_to_gql;
 use crate::models::table::Column;
 use crate::models::transaction::TransactionConfig;
 
-use super::super::query::sql::{apply_gql_conditions, quote_ident, quote_table};
+use super::super::query::sql::apply_gql_conditions;
 use super::super::type_mapping::{condition_type_ref, to_sql_scalar};
 
 /// INSERT … RETURNING *  →  single entity (or null if no columns provided).
@@ -31,8 +31,7 @@ pub(super) async fn execute_create(
         .map(|(i, col)| (col.name().clone(), i))
         .collect();
 
-    let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut insert = pool.insert(&table_ref);
+    let mut insert = pool.insert(tbl_name).schema(tbl_schema);
 
     let mut row = HashMap::new();
     for (key, val) in &input {
@@ -41,7 +40,7 @@ pub(super) async fn execute_create(
         };
         let col = &columns[idx];
         if let Some(scalar) = to_sql_scalar(col, val) {
-            row.insert(quote_ident(col.name()), Some(scalar));
+            row.insert(col.name().to_string(), Some(scalar));
         }
     }
 
@@ -84,8 +83,7 @@ pub(super) async fn execute_update(
         .map(|(i, col)| (col.name().clone(), i))
         .collect();
 
-    let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut update = pool.update(&table_ref);
+    let mut update = pool.update(tbl_name).schema(tbl_schema);
 
     let mut has_set = false;
     for (key, val) in &patch {
@@ -93,12 +91,11 @@ pub(super) async fn execute_update(
             continue;
         };
         let col = &columns[idx];
-        let quoted = quote_ident(col.name());
         if matches!(val, GqlValue::Null) {
-            update.set(&quoted, None);
+            update.set(col.name(), None);
             has_set = true;
         } else if let Some(scalar) = to_sql_scalar(col, val) {
-            update.set(&quoted, Some(scalar));
+            update.set(col.name(), Some(scalar));
             has_set = true;
         }
     }
@@ -136,8 +133,7 @@ pub(super) async fn execute_delete(
     columns: &[Arc<Column>],
     tx_config: Option<TransactionConfig>,
 ) -> Result<Option<FieldValue<'static>>, async_graphql::Error> {
-    let table_ref = quote_table(tbl_schema, tbl_name);
-    let mut delete = pool.delete(&table_ref);
+    let mut delete = pool.delete(tbl_name).schema(tbl_schema);
 
     if let Some(pairs) = condition {
         apply_gql_conditions(&mut delete, pairs, columns)?;
