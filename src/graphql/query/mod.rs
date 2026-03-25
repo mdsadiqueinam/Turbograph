@@ -170,16 +170,9 @@ pub fn generate_query_by_id(table: Arc<Table>, pool: Arc<Pool>) -> Option<Field>
         .join("And");
     let field_name = format!("{}By{}", type_name, pk_part);
 
-    // Build the columns lookup for type mapping
-    let columns: Vec<Arc<crate::models::table::Column>> = table.columns().to_vec();
-    let col_by_name: std::collections::HashMap<String, usize> = columns
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.name().to_string(), i))
-        .collect();
-
     let tbl_schema = table.schema_name().to_string();
     let tbl_name = table.name().to_string();
+    let tbl_type_name = table.type_name();
 
     // Build arguments for each PK column first (before capturing in closure)
     let pk_args: Vec<(String, TypeRef)> = pk_columns
@@ -197,12 +190,10 @@ pub fn generate_query_by_id(table: Arc<Table>, pool: Arc<Pool>) -> Option<Field>
         .collect();
 
     // Build the field with resolver closure
-    let mut field = Field::new(field_name, TypeRef::named(table.type_name()), move |ctx| {
+    let mut field = Field::new(field_name, TypeRef::named(tbl_type_name), move |ctx| {
         let pool = pool.clone();
         let tbl_schema = tbl_schema.clone();
         let tbl_name = tbl_name.clone();
-        let col_by_name = col_by_name.clone();
-        let columns = columns.clone();
         let pk_columns = pk_columns.clone();
         let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 
@@ -212,13 +203,6 @@ pub fn generate_query_by_id(table: Arc<Table>, pool: Arc<Pool>) -> Option<Field>
 
             // Apply equality filters for each PK column
             for col in &pk_columns {
-                let col_idx = *col_by_name.get(col.name()).ok_or_else(|| {
-                    db_err_to_gql(crate::db::error::DbError::Query(format!(
-                        "column {} not found",
-                        col.name()
-                    )))
-                })?;
-                let col = &columns[col_idx];
                 let quoted = sql::quote_ident(col.name());
                 let arg_val = ctx.args.get(&col.field_name()).ok_or_else(|| {
                     db_err_to_gql(crate::db::error::DbError::Query(format!(
