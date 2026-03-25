@@ -66,11 +66,19 @@ pub async fn get_tables(
                 a.atttypid AS type_oid,
                 NOT a.attnotnull AS nullable,
                 a.atthasdef AS has_default,
-                pg_catalog.col_description(a.attrelid, a.attnum) AS comment
+                pg_catalog.col_description(a.attrelid, a.attnum) AS comment,
+                CASE
+                    WHEN pk.conkey IS NOT NULL THEN TRUE
+                    ELSE FALSE
+                END AS is_primary_key
             FROM
                 pg_catalog.pg_attribute a
+            LEFT JOIN pg_catalog.pg_constraint pk
+                ON pk.conrelid = a.attrelid
+                AND pk.contype = 'p'
+                AND a.attnum = ANY(pk.conkey)
             WHERE
-                a.attrelid = ANY($1)              -- Your Table OID
+                a.attrelid = ANY($1)
                 AND a.attnum > 0
                 AND NOT a.attisdropped
             ORDER BY
@@ -85,5 +93,7 @@ pub async fn get_tables(
         .map(Column::form_row)
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(map_columns_to_table(tables, columns))
+    let tables = map_columns_to_table(tables, columns);
+
+    Ok(tables)
 }

@@ -123,6 +123,7 @@ pub(crate) async fn rebuild_schema(
     struct TableArtefacts {
         entity: Object,
         query: async_graphql::dynamic::Field,
+        query_by_id: Option<async_graphql::dynamic::Field>,
         mutation: Vec<async_graphql::dynamic::Field>,
     }
 
@@ -135,6 +136,7 @@ pub(crate) async fn rebuild_schema(
 
         let entity = graphql::generate_entity(table.clone());
         let gq = graphql::generate_query(table.clone(), pool.clone());
+        let gq_by_id = graphql::generate_query_by_id(table.clone(), pool.clone());
         let gm = if !table.omit_create() || !table.omit_update() || !table.omit_delete() {
             graphql::generate_mutation(table.clone(), pool.clone())
         } else {
@@ -144,6 +146,7 @@ pub(crate) async fn rebuild_schema(
         artefacts.push(TableArtefacts {
             entity,
             query: gq,
+            query_by_id: gq_by_id,
             mutation: gm,
         });
     }
@@ -184,6 +187,9 @@ pub(crate) async fn rebuild_schema(
 
     for a in artefacts {
         query_root = query_root.field(a.query);
+        if let Some(q_by_id) = a.query_by_id {
+            query_root = query_root.field(q_by_id);
+        }
         builder = builder.register(a.entity);
 
         for field in a.mutation {

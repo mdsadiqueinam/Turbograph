@@ -114,6 +114,7 @@ pub struct Column {
     nullable: bool,
     has_default: bool,
     omit: Omit,
+    is_pk: bool,
 }
 
 impl Column {
@@ -146,6 +147,9 @@ impl Column {
         let comment = row
             .try_get::<_, String>(6)
             .unwrap_or_else(|_| "".to_string());
+        let is_pk = row
+            .try_get::<_, bool>(7)
+            .unwrap_or(false);
         let data_type = Type::from_oid(type_oid)
             .ok_or_else(|| crate::db::error::DbError::Query(format!("Unsupported data type OID: {type_oid}")))?;
         let omit = Omit::new(&comment);
@@ -159,7 +163,13 @@ impl Column {
             nullable,
             has_default,
             omit,
+            is_pk,
         })
+    }
+
+    /// Returns `true` if this column is part of the primary key.
+    pub fn is_pk(&self) -> bool {
+        self.is_pk
     }
 
     /// OID of the table that owns this column.
@@ -230,6 +240,7 @@ impl Column {
             nullable,
             has_default: false,
             omit: Omit::for_test(omit_read),
+            is_pk: false,
         }
     }
 }
