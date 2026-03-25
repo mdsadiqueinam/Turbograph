@@ -73,6 +73,22 @@ let tx_config = ctx.data_opt::<TransactionConfig>().cloned();
 select.execute(tx_config).await
 ```
 
+### Query Builder API
+
+- All SQL quoting (table names, column names) is handled internally by query builders
+- Use `.schema("public")` for schema-qualified queries: `pool.select("users").schema("public")`
+- Do NOT pre-quote column/table names - pass raw identifiers to builder methods
+
+### Example Server
+
+- Default port is 4000 (GraphQL Playground), not 8000
+- Start with: `cargo run --manifest-path examples/server/Cargo.toml`
+
+### Testing Notes
+
+- Tests must expect quoted identifiers in SQL output (e.g., `"users"` not `users`)
+- Use `docker compose up -d postgres` before running tests
+
 ### Key Patterns
 
 - **Builder Pattern**: Query builders (`Select`, `Insert`, `Update`, `Delete`) use method chaining
