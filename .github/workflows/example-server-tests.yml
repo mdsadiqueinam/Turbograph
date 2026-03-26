@@ -37,9 +37,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -47,8 +44,9 @@ jobs:
         run: psql "$DATABASE_URL" -f db/init.sql
 
       - name: Start example server in background
+        working-directory: examples/server
         run: |
-          cargo run --manifest-path examples/server/Cargo.toml --lockfile-path Cargo.lock > server.log 2>&1 &
+          cargo run > server.log 2>&1 &
           echo $! > server.pid
 
       - name: Wait for /graphql endpoint
@@ -64,10 +62,12 @@ jobs:
           exit 1
 
       - name: Run HTTP E2E tests
-        run: cargo test --manifest-path examples/server/Cargo.toml --test e2e_http_tests --lockfile-path Cargo.lock --locked -- --test-threads=1 --nocapture
+        working-directory: examples/server
+        run: cargo test --test e2e_http_tests -- --test-threads=1 --nocapture
 
       - name: Stop example server
         if: always()
+        working-directory: examples/server
         run: |
           if [ -f server.pid ]; then
             kill "$(cat server.pid)" || true
