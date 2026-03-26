@@ -45,5 +45,10 @@ jobs:
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
 
+      # 🔥 Ensure lockfile consistency early
+      - name: Verify lockfile
+        run: cargo metadata --locked
+
+      # ✅ Workspace-consistent test run
       - name: Run root crate tests
-        run: cargo test --package turbograph --lib --tests --locked
+        run: cargo test -p turbograph --locked

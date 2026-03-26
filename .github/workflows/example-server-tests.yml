@@ -46,9 +46,13 @@ jobs:
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
 
+      # 🔥 Ensure lockfile consistency early
+      - name: Verify lockfile
+        run: cargo metadata --locked
+
       - name: Start example server in background
         run: |
-          cargo run --manifest-path examples/server/Cargo.toml > server.log 2>&1 &
+          cargo run -p server > server.log 2>&1 &
           echo $! > server.pid
 
       - name: Wait for /graphql endpoint
@@ -63,8 +67,9 @@ jobs:
           cat server.log
           exit 1
 
+      # ✅ Workspace-consistent test execution
       - name: Run HTTP E2E tests
-        run: cargo test --manifest-path examples/server/Cargo.toml --test e2e_http_tests --locked -- --test-threads=1 --nocapture
+        run: cargo test -p server --test e2e_http_tests --locked -- --test-threads=1 --nocapture
 
       - name: Stop example server
         if: always()
