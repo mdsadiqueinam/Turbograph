@@ -20,5 +20,5 @@ mod type_mapping;
 pub(crate) use connection::make_page_info_type;
 pub(crate) use entity::generate_entity;
 pub(crate) use mutation::generate_mutation;
-pub(crate) use query::generate_query;
+pub(crate) use query::{generate_query, generate_query_by_id};
 pub(crate) use type_mapping::*;

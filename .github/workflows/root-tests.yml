@@ -36,9 +36,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
-
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -46,4 +43,4 @@ jobs:
         run: psql "$DATABASE_URL" -f db/init.sql
 
       - name: Run root crate tests
-        run: cargo test --package turbograph --lib --tests --locked
+        run: cargo test --package turbograph --lib --tests

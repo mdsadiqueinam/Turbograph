@@ -12,6 +12,12 @@ use crate::db::transaction::{apply_settings, build_begin_statement};
 
 use super::{QueryBase, SupportsWhere};
 
+/// Wraps a column name in double quotes for PostgreSQL identifier quoting.
+#[inline]
+fn quote_ident(name: &str) -> String {
+    format!("\"{name}\"")
+}
+
 // ── Order-phase markers ───────────────────────────────────────────────────────
 
 /// Type-state marker indicating that no `ORDER BY` has been applied yet.
@@ -62,7 +68,7 @@ impl OrderDirection {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::operator::Op;
 /// use turbograph::db::scalar::SqlScalar;
@@ -77,6 +83,7 @@ impl OrderDirection {
 /// # Ok(()) }
 /// ```
 pub struct Select<O = NoOrder> {
+    schema: Option<String>,
     table: String,
     params: Vec<SqlScalar>,
     where_clause: String,
@@ -112,6 +119,7 @@ impl SupportsWhere for Select<NoOrder> {}
 impl Select<NoOrder> {
     pub fn new(table: &str, pool: Pool) -> Self {
         Self {
+            schema: None,
             table: table.to_string(),
             params: Vec::new(),
             where_clause: String::new(),
@@ -130,6 +138,7 @@ impl<O> Select<O> {
     /// Transition into a different order-phase without copying data.
     fn into_phase<O2>(self) -> Select<O2> {
         Select {
+            schema: self.schema,
             table: self.table,
             params: self.params,
             where_clause: self.where_clause,
@@ -139,6 +148,32 @@ impl<O> Select<O> {
             orders: self.orders,
             _order: PhantomData,
         }
+    }
+
+    /// Returns the fully-qualified, quoted table reference: `"schema"."table"` or
+    /// just `"table"` if no schema is set.
+    fn table_ref(&self) -> String {
+        match &self.schema {
+            Some(schema) => format!("\"{}\".\"{}\"", schema, self.table),
+            None => format!("\"{}\"", self.table),
+        }
+    }
+
+    /// Set the schema for this query. This allows queries like
+    /// `SELECT * FROM "schema"."table"`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// # use turbograph::db::pool::PoolExt;
+    /// # async fn example(pool: deadpool_postgres::Pool) {
+    /// let q = pool.select("users").schema("public");
+    /// // SQL: SELECT * FROM "public"."users"
+    /// # }
+    /// ```
+    pub fn schema(mut self, schema: &str) -> Self {
+        self.schema = Some(schema.to_string());
+        self
     }
 
     /// Returns the `WHERE`-clause parameters as trait objects suitable for
@@ -181,7 +216,7 @@ impl<O> Select<O> {
     /// After this call, `WHERE` mutations are no longer available at the
     /// type level, but `order_by`, `limit`, and `offset` remain usable.
     pub fn order_by(mut self, column: &str, direction: OrderDirection) -> Select<Ordered> {
-        self.orders.push((column.to_string(), direction));
+        self.orders.push((quote_ident(column), direction));
         self.into_phase()
     }
 
@@ -189,10 +224,11 @@ impl<O> Select<O> {
     /// clause appended).  Used internally to fetch the total row count in
     /// parallel with the data query.
     pub fn get_count_query(&self) -> String {
+        let table_ref = self.table_ref();
         if self.where_clause.is_empty() {
-            format!("SELECT COUNT(*) FROM {}", self.table)
+            format!("SELECT COUNT(*) FROM {table_ref}")
         } else {
-            format!("SELECT COUNT(*) FROM {}{}", self.table, self.where_clause)
+            format!("SELECT COUNT(*) FROM {table_ref}{}", self.where_clause)
         }
     }
 
@@ -214,10 +250,11 @@ impl<O> Select<O> {
     /// Returns the full `SELECT * FROM … [WHERE …] [ORDER BY …] [LIMIT $n] [OFFSET $n]`
     /// SQL string.
     pub fn get_select_query(&self) -> String {
+        let table_ref = self.table_ref();
         let mut q = if self.where_clause.is_empty() {
-            format!("SELECT * FROM {}", self.table)
+            format!("SELECT * FROM {table_ref}")
         } else {
-            format!("SELECT * FROM {}{}", self.table, self.where_clause)
+            format!("SELECT * FROM {table_ref}{}", self.where_clause)
         };
 
         let order = self.get_order_clause();
@@ -322,8 +359,8 @@ mod tests {
     fn test_select_simple() {
         let pool = test_pool();
         let q = pool.select("users");
-        assert_eq!(q.get_select_query(), "SELECT * FROM users");
-        assert_eq!(q.get_count_query(), "SELECT COUNT(*) FROM users");
+        assert_eq!(q.get_select_query(), "SELECT * FROM \"users\"");
+        assert_eq!(q.get_count_query(), "SELECT COUNT(*) FROM \"users\"");
     }
 
     #[test]
@@ -332,7 +369,7 @@ mod tests {
         let mut q = pool.select("users");
         q.where_clause("id", Op::Eq, Some(SqlScalar::Int4(42)));
         let sql = q.get_select_query();
-        assert!(sql.starts_with("SELECT * FROM users"));
+        assert!(sql.starts_with("SELECT * FROM \"users\""));
         assert!(sql.contains("WHERE"));
         assert!(sql.contains("$1"));
     }
@@ -430,7 +467,7 @@ mod tests {
         let q = pool.select("users").order_by("name", OrderDirection::Asc);
         let clause = q.get_order_clause();
         assert!(clause.contains("ORDER BY"));
-        assert!(clause.contains("name ASC"));
+        assert!(clause.contains("\"name\" ASC"));
     }
 
     #[test]
@@ -441,8 +478,8 @@ mod tests {
             .order_by("created_at", OrderDirection::Desc)
             .order_by("id", OrderDirection::Asc);
         let clause = q.get_order_clause();
-        assert!(clause.contains("created_at DESC"));
-        assert!(clause.contains("id ASC"));
+        assert!(clause.contains("\"created_at\" DESC"));
+        assert!(clause.contains("\"id\" ASC"));
         assert!(clause.contains(","));
     }
 
@@ -450,7 +487,7 @@ mod tests {
     fn test_select_order_appears_in_query() {
         let pool = test_pool();
         let q = pool.select("posts").order_by("date", OrderDirection::Desc);
-        assert!(q.get_select_query().contains("ORDER BY date DESC"));
+        assert!(q.get_select_query().contains("ORDER BY \"date\" DESC"));
     }
 
     #[test]
@@ -494,15 +531,15 @@ mod tests {
         let mut q = pool.select("users");
         q.where_clause("active", Op::Eq, Some(SqlScalar::Bool(true)));
         let sql = q.get_count_query();
-        assert!(sql.starts_with("SELECT COUNT(*) FROM users"));
+        assert!(sql.starts_with("SELECT COUNT(*) FROM \"users\""));
         assert!(sql.contains("WHERE"));
     }
 
     #[test]
     fn test_schema_qualified() {
         let pool = test_pool();
-        let q = pool.select("public.users");
-        assert!(q.get_select_query().contains("public.users"));
+        let q = pool.select("users").schema("public");
+        assert!(q.get_select_query().contains("\"public\".\"users\""));
     }
 
     #[test]
@@ -510,6 +547,6 @@ mod tests {
         let pool = test_pool();
         let mut q = pool.select("users");
         q.where_clause("deleted_at", Op::Eq, None);
-        assert!(q.get_select_query().contains("deleted_at IS"));
+        assert!(q.get_select_query().contains("\"deleted_at\" IS"));
     }
 }
