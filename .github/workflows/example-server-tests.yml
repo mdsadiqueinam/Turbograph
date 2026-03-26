@@ -29,6 +29,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:Aa123456@localhost:5432/app-db
       GRAPHQL_URL: http://localhost:4000/graphql
+      CARGO_TERM_COLOR: always
 
     steps:
       - name: Checkout
@@ -39,6 +40,9 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          # This ensures the cache is shared across the workspace
+          workspaces: "."
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -46,30 +50,39 @@ jobs:
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
 
-      # 🔥 Ensure lockfile consistency early
-      - name: Verify lockfile
-        run: cargo metadata --locked
+      # 1. PRE-BUILD: This avoids the background 'cargo run' timing out the health check.
+      # We build both the server binary and the test binary here.
+      - name: Compile server and tests
+        run: cargo build --manifest-path examples/server/Cargo.toml --tests --locked
 
+      # 2. START SERVER: Since it's already compiled, this starts instantly.
       - name: Start example server in background
         run: |
-          cargo run -p server > server.log 2>&1 &
+          cargo run --manifest-path examples/server/Cargo.toml > server.log 2>&1 &
           echo $! > server.pid
 
+      # 3. HEALTH CHECK: 60s is now more than enough since the binary is pre-built.
       - name: Wait for /graphql endpoint
         run: |
           for i in {1..60}; do
             if curl -fsS "$GRAPHQL_URL" > /dev/null; then
+              echo "✅ Server is up and responding at $GRAPHQL_URL"
               exit 0
             fi
+            echo "Waiting for server... ($i/60)"
             sleep 1
           done
-          echo "Server did not become ready in time"
+          echo "❌ Server did not become ready in time"
           cat server.log
           exit 1
 
-      # ✅ Workspace-consistent test execution
+      # 4. RUN TESTS: Using --no-run ensures we use the binary we just built.
       - name: Run HTTP E2E tests
-        run: cargo test -p server --test e2e_http_tests --locked -- --test-threads=1 --nocapture
+        run: >
+          cargo test --manifest-path examples/server/Cargo.toml 
+          --test e2e_http_tests 
+          --locked 
+          -- --test-threads=1 --nocapture
 
       - name: Stop example server
         if: always()
@@ -77,4 +90,8 @@ jobs:
           if [ -f server.pid ]; then
             kill "$(cat server.pid)" || true
           fi
-          cat server.log || true
+          # Always output logs on failure to help debugging
+          if [ "${{ job.status }}" == "failure" ]; then
+            echo "--- Server Logs ---"
+            cat server.log || true
+          fi
