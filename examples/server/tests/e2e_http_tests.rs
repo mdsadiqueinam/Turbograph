@@ -381,3 +381,119 @@ async fn e2e_products_delete() {
         "deleted product should not be in allProducts"
     );
 }
+
+#[tokio::test]
+async fn e2e_user_by_id() {
+    let client = Client::new();
+
+    // Query user by ID (alice is id=1 in seed data)
+    let data = gql(
+        &client,
+        r#"{
+            userById(id: 1) {
+                id
+                username
+                email
+                bio
+                isActive
+            }
+        }"#,
+    )
+    .await;
+
+    let user = &data["userById"];
+    assert!(!user.is_null(), "userById should return a user");
+    assert_eq!(user["id"].as_i64(), Some(1));
+    assert_eq!(user["username"], json!("alice"));
+    assert_eq!(user["email"], json!("alice@example.com"));
+    assert_eq!(
+        user["bio"],
+        json!("Full-stack developer and coffee enthusiast.")
+    );
+    assert_eq!(user["isActive"], json!(true));
+}
+
+#[tokio::test]
+async fn e2e_user_by_id_not_found() {
+    let client = Client::new();
+
+    // Query non-existent user
+    let data = gql(
+        &client,
+        r#"{
+            userById(id: 99999) {
+                id
+                username
+            }
+        }"#,
+    )
+    .await;
+
+    let user = &data["userById"];
+    assert!(user.is_null(), "userById should return null for non-existent user");
+}
+
+#[tokio::test]
+async fn e2e_product_by_id() {
+    let client = Client::new();
+
+    // First get a product's ID via allProducts
+    let all_products = gql(
+        &client,
+        r#"{
+            allProducts(orderBy: [NAME_ASC], first: 1) {
+                nodes {
+                    id
+                    name
+                    price
+                }
+            }
+        }"#,
+    )
+    .await;
+
+    let product = &all_products["allProducts"]["nodes"][0];
+    let product_id = product["id"].as_str().expect("product id should be a string");
+    let product_name = product["name"].as_str().expect("product name should be a string");
+
+    // Now query that product by its UUID
+    let data = gql(
+        &client,
+        &format!(
+            r#"{{
+                productById(id: "{}") {{
+                    id
+                    name
+                    price
+                }}
+            }}"#,
+            product_id
+        ),
+    )
+    .await;
+
+    let fetched = &data["productById"];
+    assert!(!fetched.is_null(), "productById should return a product");
+    assert_eq!(fetched["id"], json!(product_id));
+    assert_eq!(fetched["name"], json!(product_name));
+}
+
+#[tokio::test]
+async fn e2e_product_by_id_not_found() {
+    let client = Client::new();
+
+    // Query with a valid UUID format but non-existent
+    let data = gql(
+        &client,
+        r#"{
+            productById(id: "00000000-0000-0000-0000-000000000000") {
+                id
+                name
+            }
+        }"#,
+    )
+    .await;
+
+    let product = &data["productById"];
+    assert!(product.is_null(), "productById should return null for non-existent UUID");
+}
