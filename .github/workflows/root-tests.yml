@@ -28,7 +28,6 @@ jobs:
 
     env:
       DATABASE_URL: postgres://postgres:Aa123456@localhost:5432/app-db
-      CARGO_TERM_COLOR: always
 
     steps:
       - name: Checkout
@@ -39,8 +38,6 @@ jobs:
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "."
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -48,7 +45,5 @@ jobs:
       - name: Initialize database schema and seed data
         run: psql "$DATABASE_URL" -f db/init.sql
 
-      # Since we aren't starting a background server, 
-      # we can go straight to cargo test.
       - name: Run root crate tests
-        run: cargo test --package turbograph --lib --tests --locked -- --nocapture
+        run: cargo test --package turbograph --lib --tests --lockfile-path Cargo.lock --locked
