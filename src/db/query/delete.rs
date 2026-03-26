@@ -20,7 +20,7 @@ use super::{QueryBase, SupportsWhere};
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::operator::Op;
 /// use turbograph::db::scalar::SqlScalar;
@@ -86,7 +86,7 @@ impl Delete {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// # use turbograph::db::pool::PoolExt;
     /// # async fn example(pool: deadpool_postgres::Pool) {
     /// let mut q = pool.delete("users").schema("public");

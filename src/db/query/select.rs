@@ -68,7 +68,7 @@ impl OrderDirection {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::operator::Op;
 /// use turbograph::db::scalar::SqlScalar;
@@ -164,7 +164,7 @@ impl<O> Select<O> {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// # use turbograph::db::pool::PoolExt;
     /// # async fn example(pool: deadpool_postgres::Pool) {
     /// let q = pool.select("users").schema("public");

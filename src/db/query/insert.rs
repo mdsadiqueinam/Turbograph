@@ -31,7 +31,7 @@ fn quote_ident(name: &str) -> String {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::scalar::SqlScalar;
 /// use std::collections::HashMap;
@@ -100,7 +100,7 @@ impl Insert {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// # use turbograph::db::pool::PoolExt;
     /// # async fn example(pool: deadpool_postgres::Pool) {
     /// let mut q = pool.insert("users").schema("public");

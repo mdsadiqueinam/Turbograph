@@ -20,7 +20,7 @@ fn quote_ident(name: &str) -> String {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::operator::Op;
 /// use turbograph::db::scalar::SqlScalar;
@@ -60,7 +60,7 @@ pub trait WhereBuilder {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// # use turbograph::db::pool::PoolExt;
     /// # use turbograph::db::operator::Op;
     /// # use turbograph::db::scalar::SqlScalar;

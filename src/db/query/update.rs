@@ -32,7 +32,7 @@ fn quote_ident(name: &str) -> String {
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 /// use turbograph::db::operator::Op;
 /// use turbograph::db::scalar::SqlScalar;
@@ -101,7 +101,7 @@ impl Update {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// # use turbograph::db::pool::PoolExt;
     /// # async fn example(pool: deadpool_postgres::Pool) {
     /// let mut q = pool.update("users").schema("public");

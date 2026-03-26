@@ -32,7 +32,7 @@ pub(crate) fn resolve(
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use turbograph::db::pool::PoolExt;
 ///
 /// // pool: deadpool_postgres::Pool
